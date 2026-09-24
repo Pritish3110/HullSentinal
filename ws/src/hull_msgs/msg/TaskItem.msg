@@ -3,3 +3,8 @@ string defect_type
 float32 utility_score
 geometry_msgs/Point position
 string status
+uint32 lane_id
+string risk_level
+bool emergency_flag
+bool eligible
+float32 path_cost

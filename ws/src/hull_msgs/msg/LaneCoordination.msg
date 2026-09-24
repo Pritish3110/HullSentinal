@@ -1,0 +1,5 @@
+string event
+uint32 active_mapper_lane
+uint32 released_cleaner_lane
+bool emergency_active
+builtin_interfaces/Time stamp

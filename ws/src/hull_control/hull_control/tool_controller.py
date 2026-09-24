@@ -118,7 +118,7 @@ class ToolController(Node):
 
     def _report_complete(self):
         if not self.complete_cli.service_is_ready():
-            self.get_logger().warn('/task_complete service not available yet, waiting...')
+            self.get_logger().warning('/task_complete service not available yet, waiting...')
             return
 
         req = TaskComplete.Request()

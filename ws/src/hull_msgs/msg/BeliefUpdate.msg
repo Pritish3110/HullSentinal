@@ -3,4 +3,9 @@ string status
 float32 severity
 float32 confidence
 uint32 rescan_count
+uint32 lane_id
+string risk_level
+bool emergency_flag
+bool eligible_lane
+string assigned_robot
 builtin_interfaces/Time stamp

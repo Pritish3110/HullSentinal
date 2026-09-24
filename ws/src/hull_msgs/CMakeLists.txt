@@ -18,6 +18,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/BeliefUpdate.msg"
   "msg/RobotStatus.msg"
   "msg/MissionStatus.msg"
+  "msg/MapperStatus.msg"
+  "msg/LaneCoordination.msg"
   "srv/TaskComplete.srv"
   "srv/RescanRequest.srv"
   DEPENDENCIES std_msgs geometry_msgs builtin_interfaces

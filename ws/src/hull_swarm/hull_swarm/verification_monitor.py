@@ -40,7 +40,7 @@ class VerificationMonitor(Node):
         self.get_logger().info(f"[Verification] Task {d_id} reported complete by {r_id} -> Triggering re-scan verification")
 
         if not self.rescan_cli.service_is_ready():
-            self.get_logger().warn('/rescan_request service not ready; defaulting to VERIFIED_CLEAN')
+            self.get_logger().warning('/rescan_request service not ready; defaulting to VERIFIED_CLEAN')
             b_done = BeliefUpdate()
             b_done.defect_id = d_id
             b_done.status = 'VERIFIED_CLEAN'
@@ -80,7 +80,7 @@ class VerificationMonitor(Node):
                 b_update.severity = float(res.residual_severity)
                 b_update.confidence = float(res.confidence)
                 self.update_pub.publish(b_update)
-                self.get_logger().warn(f"[Verification Alert] Defect {d_id} clean FAILED (residual={res.residual_severity:.2f}) -> RE_QUEUED (attempt {count})")
+                self.get_logger().warning(f"[Verification Alert] Defect {d_id} clean FAILED (residual={res.residual_severity:.2f}) -> RE_QUEUED (attempt {count})")
             else:
                 # Clean confirmed: mark VERIFIED_CLEAN
                 b_update.status = 'VERIFIED_CLEAN'
