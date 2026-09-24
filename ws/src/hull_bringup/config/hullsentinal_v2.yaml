@@ -1,0 +1,232 @@
+# =============================================================================
+# HullSentinal V2 — Centralized Master Configuration
+# Single Source of Truth for World, Robots, Cognition, Safety, & Visualization
+# =============================================================================
+
+world:
+  hull_width: 24.0          # Hull manifold length (meters)
+  hull_height: 8.0          # Hull manifold height (meters)
+  safety_margin: 0.8        # Hard boundary safety inset (meters)
+  num_lanes: 3              # Number of horizontal coverage lanes
+  lane_margin: 1.0          # Top/bottom margin for lane boundary
+  lane_spacing: 2.0         # Vertical spacing between lane centerlines
+  lane_width: 1.8           # Effective lane swath width (meters)
+
+robots:
+  mapper_1:
+    role: "mapper"
+    start_x: 1.5
+    start_y: 2.0
+    start_yaw: 0.0
+    radius: 0.45
+    max_linear_speed: 1.20
+    max_angular_speed: 1.50
+    sensor_fov_radius: 1.80
+    sensor_range: 2.20
+  cleaner_1:
+    role: "cleaner"
+    start_x: 1.5
+    start_y: 7.0
+    start_yaw: 0.0
+    radius: 0.45
+    max_linear_speed: 1.40
+    max_angular_speed: 1.50
+    tool_radius: 0.45
+    cleaning_rate: 1.50
+    clean_duration: 1.00
+
+safety:
+  safe_distance: 1.50       # Distance for NORMAL status (meters)
+  warning_distance: 1.00    # Distance to trigger WARNING slowing (meters)
+  critical_distance: 0.60   # Distance to trigger AVOIDANCE / emergency halt (meters)
+  deadlock_timeout_sec: 2.5 # Timeout before cleaner initiates sidestep
+
+risk:
+  threshold_normal: 0.50    # Severity < 0.50 -> NORMAL
+  threshold_medium: 0.70    # Severity < 0.70 -> MEDIUM
+  threshold_high: 0.85      # Severity < 0.85 -> HIGH
+  threshold_critical: 0.85  # Severity >= 0.85 -> CRITICAL (Emergency Trigger)
+
+planner:
+  grid_resolution: 0.20           # Occupancy grid cell size (meters)
+  obstacle_inflation_radius: 0.55 # Static obstacle buffer (meters)
+  dynamic_inflation_radius: 0.75  # Moving robot buffer (meters)
+
+utility:
+  w1_severity_risk: 1.00
+  w2_path_cost: 0.08
+  w3_age_bonus: 0.05
+  requeue_bonus: 0.20
+  emergency_override_bonus: 10.0
+  risk_weights:
+    crack: 1.00
+    rust: 0.70
+    biofouling: 0.40
+
+visualization:
+  rviz_update_rate: 10.0
+  label_z_offset: 0.45
+  label_stagger_dist: 1.50
+  fixed_frame: "hull_world"
+
+# Deterministic static obstacles (maintenance panels, sea chests, anodes)
+# Coordinates (center_x, center_y, width, height)
+static_obstacles:
+  - id: "obs_hatch_01"
+    name: "Maintenance Hatch Alpha"
+    x: 7.5
+    y: 2.8
+    width: 1.2
+    height: 0.6
+  - id: "obs_panel_02"
+    name: "Equipment Panel Bravo"
+    x: 14.0
+    y: 1.4
+    width: 1.0
+    height: 0.5
+  - id: "obs_anode_03"
+    name: "Sacrificial Anode Array"
+    x: 6.0
+    y: 4.8
+    width: 1.0
+    height: 0.5
+  - id: "obs_seachest_04"
+    name: "Sea Chest Intake Grate"
+    x: 17.5
+    y: 3.5
+    width: 1.4
+    height: 0.7
+  - id: "obs_sonar_05"
+    name: "Echo Sounder Transducer"
+    x: 11.5
+    y: 5.4
+    width: 1.0
+    height: 0.6
+  - id: "obs_plate_06"
+    name: "Structural Doubler Plate"
+    x: 18.5
+    y: 6.6
+    width: 1.2
+    height: 0.5
+
+# 14 Deterministic defects spread across all 3 lanes
+# One designated escalating defect (defect_crack_02) that grows past CRITICAL mid-demo
+defects:
+  # --- Lane 1 (Y ~ 2.0m) ---
+  - id: "defect_crack_01"
+    type: "crack"
+    x: 4.0
+    y: 2.0
+    lane_id: 1
+    severity: 0.92
+    confidence: 0.94
+    growth_rate: 0.0001
+  - id: "defect_rust_01"
+    type: "rust"
+    x: 9.5
+    y: 1.8
+    lane_id: 1
+    severity: 0.72
+    confidence: 0.88
+    growth_rate: 0.0001
+  - id: "defect_bio_01"
+    type: "biofouling"
+    x: 12.0
+    y: 2.2
+    lane_id: 1
+    severity: 0.54
+    confidence: 0.90
+    growth_rate: 0.0001
+  - id: "defect_rust_02"
+    type: "rust"
+    x: 16.5
+    y: 2.0
+    lane_id: 1
+    severity: 0.65
+    confidence: 0.85
+    growth_rate: 0.0001
+  - id: "defect_bio_02"
+    type: "biofouling"
+    x: 20.5
+    y: 1.7
+    lane_id: 1
+    severity: 0.48
+    confidence: 0.92
+    growth_rate: 0.0001
+
+  # --- Lane 2 (Y ~ 4.0m) ---
+  - id: "defect_bio_03"
+    type: "biofouling"
+    x: 3.5
+    y: 4.2
+    lane_id: 2
+    severity: 0.58
+    confidence: 0.89
+    growth_rate: 0.0001
+  # Designate defect_crack_02 as escalating defect (0.68 -> 0.86+ across CRITICAL)
+  - id: "defect_crack_02"
+    type: "crack"
+    x: 8.5
+    y: 3.8
+    lane_id: 2
+    severity: 0.68
+    confidence: 0.95
+    growth_rate: 0.0080
+  - id: "defect_rust_03"
+    type: "rust"
+    x: 11.0
+    y: 4.3
+    lane_id: 2
+    severity: 0.74
+    confidence: 0.87
+    growth_rate: 0.0001
+  - id: "defect_crack_03"
+    type: "crack"
+    x: 15.0
+    y: 3.7
+    lane_id: 2
+    severity: 0.84
+    confidence: 0.91
+    growth_rate: 0.0001
+  - id: "defect_bio_04"
+    type: "biofouling"
+    x: 19.5
+    y: 4.1
+    lane_id: 2
+    severity: 0.46
+    confidence: 0.90
+    growth_rate: 0.0001
+
+  # --- Lane 3 (Y ~ 6.0m) ---
+  - id: "defect_crack_04"
+    type: "crack"
+    x: 5.0
+    y: 6.0
+    lane_id: 3
+    severity: 0.89
+    confidence: 0.93
+    growth_rate: 0.0001
+  - id: "defect_rust_04"
+    type: "rust"
+    x: 9.0
+    y: 6.3
+    lane_id: 3
+    severity: 0.66
+    confidence: 0.86
+    growth_rate: 0.0001
+  - id: "defect_bio_05"
+    type: "biofouling"
+    x: 13.5
+    y: 5.8
+    lane_id: 3
+    severity: 0.52
+    confidence: 0.91
+    growth_rate: 0.0001
+  - id: "defect_rust_05"
+    type: "rust"
+    x: 16.0
+    y: 6.2
+    lane_id: 3
+    severity: 0.78
+    confidence: 0.88
+    growth_rate: 0.0001

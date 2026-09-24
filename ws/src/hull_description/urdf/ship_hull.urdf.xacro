@@ -3,27 +3,42 @@
 
   <!-- Materials -->
   <material name="hull_marine_steel">
-    <color rgba="0.22 0.28 0.35 1.0"/>
+    <color rgba="0.20 0.25 0.32 1.0"/>
   </material>
   <material name="ocean_water_plane">
-    <color rgba="0.04 0.15 0.30 0.9"/>
+    <color rgba="0.03 0.12 0.25 0.92"/>
   </material>
   <material name="hull_safety_coaming">
     <color rgba="0.95 0.80 0.10 1.0"/>
   </material>
   <material name="hull_weld_seam">
-    <color rgba="0.15 0.18 0.22 1.0"/>
+    <color rgba="0.14 0.17 0.21 1.0"/>
+  </material>
+  <material name="obstacle_hatch_material">
+    <color rgba="0.85 0.45 0.10 1.0"/>
+  </material>
+  <material name="obstacle_panel_material">
+    <color rgba="0.35 0.40 0.45 1.0"/>
+  </material>
+  <material name="obstacle_anode_material">
+    <color rgba="0.75 0.75 0.80 1.0"/>
+  </material>
+  <material name="obstacle_grate_material">
+    <color rgba="0.12 0.15 0.18 1.0"/>
+  </material>
+  <material name="lane_guide_line">
+    <color rgba="0.30 0.50 0.70 0.25"/>
   </material>
 
   <!-- World Frame / Origin -->
   <link name="hull_world"/>
 
-  <!-- Deep Ocean Plane behind the hull -->
+  <!-- Deep Ocean Plane behind the hull (32m x 16m) -->
   <link name="ocean_water_link">
     <visual>
-      <origin xyz="10.0 3.0 -0.25" rpy="0 0 0"/>
+      <origin xyz="12.0 4.0 -0.25" rpy="0 0 0"/>
       <geometry>
-        <box size="28.0 12.0 0.05"/>
+        <box size="32.0 16.0 0.05"/>
       </geometry>
       <material name="ocean_water_plane"/>
     </visual>
@@ -34,24 +49,24 @@
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
 
-  <!-- Main Ship Hull Plate (20.0m x 6.0m surface) -->
+  <!-- Main Dominant Ship Hull Plate (24.0m x 8.0m surface) -->
   <link name="hull_surface">
     <visual>
-      <origin xyz="10.0 3.0 -0.06" rpy="0 0 0"/>
+      <origin xyz="12.0 4.0 -0.06" rpy="0 0 0"/>
       <geometry>
-        <box size="20.0 6.0 0.12"/>
+        <box size="24.0 8.0 0.12"/>
       </geometry>
       <material name="hull_marine_steel"/>
     </visual>
     <collision>
-      <origin xyz="10.0 3.0 -0.06" rpy="0 0 0"/>
+      <origin xyz="12.0 4.0 -0.06" rpy="0 0 0"/>
       <geometry>
-        <box size="20.0 6.0 0.12"/>
+        <box size="24.0 8.0 0.12"/>
       </geometry>
     </collision>
     <inertial>
-      <mass value="50000.0"/>
-      <inertia ixx="15000.0" ixy="0" ixz="0" iyy="160000.0" iyz="0" izz="175000.0"/>
+      <mass value="75000.0"/>
+      <inertia ixx="40000.0" ixy="0" ixz="0" iyy="360000.0" iyz="0" izz="400000.0"/>
     </inertial>
   </link>
   <joint name="hull_surface_joint" type="fixed">
@@ -60,13 +75,12 @@
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
 
-  <!-- Visual Hull Perimeter Rub Rails / Coaming (Safety Borders) -->
-  <!-- Bottom border (Y = 0) -->
+  <!-- Safety Perimeter Coaming / Rub Rails -->
   <link name="border_bottom">
     <visual>
-      <origin xyz="10.0 0.0 0.04" rpy="0 0 0"/>
+      <origin xyz="12.0 0.0 0.04" rpy="0 0 0"/>
       <geometry>
-        <box size="20.2 0.10 0.08"/>
+        <box size="24.2 0.10 0.08"/>
       </geometry>
       <material name="hull_safety_coaming"/>
     </visual>
@@ -77,12 +91,11 @@
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
 
-  <!-- Top border (Y = 6.0) -->
   <link name="border_top">
     <visual>
-      <origin xyz="10.0 6.0 0.04" rpy="0 0 0"/>
+      <origin xyz="12.0 8.0 0.04" rpy="0 0 0"/>
       <geometry>
-        <box size="20.2 0.10 0.08"/>
+        <box size="24.2 0.10 0.08"/>
       </geometry>
       <material name="hull_safety_coaming"/>
     </visual>
@@ -93,12 +106,11 @@
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
 
-  <!-- Left border (X = 0) -->
   <link name="border_left">
     <visual>
-      <origin xyz="0.0 3.0 0.04" rpy="0 0 0"/>
+      <origin xyz="0.0 4.0 0.04" rpy="0 0 0"/>
       <geometry>
-        <box size="0.10 6.0 0.08"/>
+        <box size="0.10 8.0 0.08"/>
       </geometry>
       <material name="hull_safety_coaming"/>
     </visual>
@@ -109,12 +121,11 @@
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
 
-  <!-- Right border (X = 20.0) -->
   <link name="border_right">
     <visual>
-      <origin xyz="20.0 3.0 0.04" rpy="0 0 0"/>
+      <origin xyz="24.0 4.0 0.04" rpy="0 0 0"/>
       <geometry>
-        <box size="0.10 6.0 0.08"/>
+        <box size="0.10 8.0 0.08"/>
       </geometry>
       <material name="hull_safety_coaming"/>
     </visual>
@@ -125,47 +136,183 @@
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
 
-  <!-- Hull Structural Weld Seams / Plates Grid Lines -->
-  <link name="hull_grid_seams">
+  <!-- Structural Plate Welds & Inspection Lane Dividers -->
+  <link name="hull_lanes_weld_grid">
+    <!-- Lane Divider 1-2 (Y = 3.0) -->
     <visual>
-      <origin xyz="5.0 3.0 0.005" rpy="0 0 0"/>
+      <origin xyz="12.0 3.0 0.005" rpy="0 0 0"/>
       <geometry>
-        <box size="0.04 5.9 0.01"/>
+        <box size="23.8 0.04 0.01"/>
+      </geometry>
+      <material name="lane_guide_line"/>
+    </visual>
+    <!-- Lane Divider 2-3 (Y = 5.0) -->
+    <visual>
+      <origin xyz="12.0 5.0 0.005" rpy="0 0 0"/>
+      <geometry>
+        <box size="23.8 0.04 0.01"/>
+      </geometry>
+      <material name="lane_guide_line"/>
+    </visual>
+    <!-- Vertical Frame Welds -->
+    <visual>
+      <origin xyz="6.0 4.0 0.005" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.04 7.9 0.01"/>
       </geometry>
       <material name="hull_weld_seam"/>
     </visual>
     <visual>
-      <origin xyz="10.0 3.0 0.005" rpy="0 0 0"/>
+      <origin xyz="12.0 4.0 0.005" rpy="0 0 0"/>
       <geometry>
-        <box size="0.04 5.9 0.01"/>
+        <box size="0.04 7.9 0.01"/>
       </geometry>
       <material name="hull_weld_seam"/>
     </visual>
     <visual>
-      <origin xyz="15.0 3.0 0.005" rpy="0 0 0"/>
+      <origin xyz="18.0 4.0 0.005" rpy="0 0 0"/>
       <geometry>
-        <box size="0.04 5.9 0.01"/>
-      </geometry>
-      <material name="hull_weld_seam"/>
-    </visual>
-    <visual>
-      <origin xyz="10.0 2.0 0.005" rpy="0 0 0"/>
-      <geometry>
-        <box size="19.9 0.04 0.01"/>
-      </geometry>
-      <material name="hull_weld_seam"/>
-    </visual>
-    <visual>
-      <origin xyz="10.0 4.0 0.005" rpy="0 0 0"/>
-      <geometry>
-        <box size="19.9 0.04 0.01"/>
+        <box size="0.04 7.9 0.01"/>
       </geometry>
       <material name="hull_weld_seam"/>
     </visual>
   </link>
-  <joint name="hull_grid_joint" type="fixed">
+  <joint name="hull_lanes_joint" type="fixed">
     <parent link="hull_surface"/>
-    <child link="hull_grid_seams"/>
+    <child link="hull_lanes_weld_grid"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Static Obstacles Attached to Hull Surface (Collision & Visual) -->
+  <!-- Obstacle 1: Maintenance Hatch Alpha at (7.5, 2.8) -->
+  <link name="obs_hatch_01">
+    <visual>
+      <origin xyz="7.5 2.8 0.04" rpy="0 0 0"/>
+      <geometry>
+        <box size="1.2 0.6 0.08"/>
+      </geometry>
+      <material name="obstacle_hatch_material"/>
+    </visual>
+    <collision>
+      <origin xyz="7.5 2.8 0.04" rpy="0 0 0"/>
+      <geometry>
+        <box size="1.2 0.6 0.08"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="obs_hatch_01_joint" type="fixed">
+    <parent link="hull_surface"/>
+    <child link="obs_hatch_01"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Obstacle 2: Equipment Panel Bravo at (14.0, 1.4) -->
+  <link name="obs_panel_02">
+    <visual>
+      <origin xyz="14.0 1.4 0.04" rpy="0 0 0"/>
+      <geometry>
+        <box size="1.0 0.5 0.08"/>
+      </geometry>
+      <material name="obstacle_panel_material"/>
+    </visual>
+    <collision>
+      <origin xyz="14.0 1.4 0.04" rpy="0 0 0"/>
+      <geometry>
+        <box size="1.0 0.5 0.08"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="obs_panel_02_joint" type="fixed">
+    <parent link="hull_surface"/>
+    <child link="obs_panel_02"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Obstacle 3: Sacrificial Anode Array at (6.0, 4.8) -->
+  <link name="obs_anode_03">
+    <visual>
+      <origin xyz="6.0 4.8 0.04" rpy="0 0 0"/>
+      <geometry>
+        <box size="1.0 0.5 0.08"/>
+      </geometry>
+      <material name="obstacle_anode_material"/>
+    </visual>
+    <collision>
+      <origin xyz="6.0 4.8 0.04" rpy="0 0 0"/>
+      <geometry>
+        <box size="1.0 0.5 0.08"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="obs_anode_03_joint" type="fixed">
+    <parent link="hull_surface"/>
+    <child link="obs_anode_03"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Obstacle 4: Sea Chest Intake Grate at (17.5, 3.5) -->
+  <link name="obs_seachest_04">
+    <visual>
+      <origin xyz="17.5 3.5 0.04" rpy="0 0 0"/>
+      <geometry>
+        <box size="1.4 0.7 0.08"/>
+      </geometry>
+      <material name="obstacle_grate_material"/>
+    </visual>
+    <collision>
+      <origin xyz="17.5 3.5 0.04" rpy="0 0 0"/>
+      <geometry>
+        <box size="1.4 0.7 0.08"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="obs_seachest_04_joint" type="fixed">
+    <parent link="hull_surface"/>
+    <child link="obs_seachest_04"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Obstacle 5: Echo Sounder Transducer at (11.5, 5.4) -->
+  <link name="obs_sonar_05">
+    <visual>
+      <origin xyz="11.5 5.4 0.04" rpy="0 0 0"/>
+      <geometry>
+        <box size="1.0 0.6 0.08"/>
+      </geometry>
+      <material name="obstacle_panel_material"/>
+    </visual>
+    <collision>
+      <origin xyz="11.5 5.4 0.04" rpy="0 0 0"/>
+      <geometry>
+        <box size="1.0 0.6 0.08"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="obs_sonar_05_joint" type="fixed">
+    <parent link="hull_surface"/>
+    <child link="obs_sonar_05"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Obstacle 6: Structural Doubler Plate at (18.5, 6.6) -->
+  <link name="obs_plate_06">
+    <visual>
+      <origin xyz="18.5 6.6 0.04" rpy="0 0 0"/>
+      <geometry>
+        <box size="1.2 0.5 0.08"/>
+      </geometry>
+      <material name="obstacle_panel_material"/>
+    </visual>
+    <collision>
+      <origin xyz="18.5 6.6 0.04" rpy="0 0 0"/>
+      <geometry>
+        <box size="1.2 0.5 0.08"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="obs_plate_06_joint" type="fixed">
+    <parent link="hull_surface"/>
+    <child link="obs_plate_06"/>
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
 

@@ -202,10 +202,10 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 19.5
+      Distance: 22.0
       Focal Point:
-        X: 10.0
-        Y: 3.0
+        X: 12.0
+        Y: 4.0
         Z: 0.0
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05
