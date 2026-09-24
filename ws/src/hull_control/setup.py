@@ -19,6 +19,7 @@ setup(
     entry_points={
         'console_scripts': [
             'crawler_controller = hull_control.crawler_controller:main',
+            'mapper_controller = hull_control.mapper_controller:main',
             'tool_controller = hull_control.tool_controller:main',
             'safety_barrier = hull_control.safety_barrier:main',
             'geofence_node = hull_control.geofence_node:main',
