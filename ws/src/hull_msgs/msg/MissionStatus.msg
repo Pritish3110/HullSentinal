@@ -1,0 +1,8 @@
+std_msgs/Header header
+uint32 total_defects
+uint32 pending_count
+uint32 in_progress_count
+uint32 cleaned_count
+uint32 requeued_count
+float32 elapsed_time_sec
+bool all_clean

@@ -1,0 +1,164 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="mapper_robot">
+
+  <xacro:arg name="robot_name" default="mapper_1"/>
+  <xacro:property name="name" value="$(arg robot_name)"/>
+
+  <!-- Color Definitions -->
+  <material name="mapper_cyan">
+    <color rgba="0.0 0.85 0.95 1.0"/>
+  </material>
+  <material name="thruster_dark">
+    <color rgba="0.12 0.14 0.18 1.0"/>
+  </material>
+  <material name="sensor_glass">
+    <color rgba="0.1 0.3 0.85 0.9"/>
+  </material>
+  <material name="led_white">
+    <color rgba="1.0 1.0 0.8 1.0"/>
+  </material>
+  <material name="beacon_amber">
+    <color rgba="1.0 0.7 0.0 1.0"/>
+  </material>
+
+  <!-- Base Footprint on Hull Manifold Surface -->
+  <link name="${name}/base_footprint"/>
+
+  <joint name="${name}_base_joint" type="fixed">
+    <parent link="${name}/base_footprint"/>
+    <child link="${name}/base_link"/>
+    <origin xyz="0 0 0.12" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Main ROV Avionics & Hull Crawler Chassis (at least 0.6m in length) -->
+  <link name="${name}/base_link">
+    <visual>
+      <geometry>
+        <box size="0.65 0.45 0.16"/>
+      </geometry>
+      <material name="mapper_cyan"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.65 0.45 0.16"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="8.0"/>
+      <inertia ixx="0.08" ixy="0.0" ixz="0.0" iyy="0.14" iyz="0.0" izz="0.18"/>
+    </inertial>
+  </link>
+
+  <!-- Left Magnetic Adhesion Track / Nacelle -->
+  <link name="${name}/left_track">
+    <visual>
+      <geometry>
+        <box size="0.70 0.09 0.10"/>
+      </geometry>
+      <material name="thruster_dark"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.70 0.09 0.10"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="1.5"/>
+      <inertia ixx="0.005" ixy="0" ixz="0" iyy="0.02" iyz="0" izz="0.02"/>
+    </inertial>
+  </link>
+  <joint name="${name}_left_track_joint" type="fixed">
+    <parent link="${name}/base_link"/>
+    <child link="${name}/left_track"/>
+    <origin xyz="0 0.24 -0.04" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Right Magnetic Adhesion Track / Nacelle -->
+  <link name="${name}/right_track">
+    <visual>
+      <geometry>
+        <box size="0.70 0.09 0.10"/>
+      </geometry>
+      <material name="thruster_dark"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.70 0.09 0.10"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="1.5"/>
+      <inertia ixx="0.005" ixy="0" ixz="0" iyy="0.02" iyz="0" izz="0.02"/>
+    </inertial>
+  </link>
+  <joint name="${name}_right_track_joint" type="fixed">
+    <parent link="${name}/base_link"/>
+    <child link="${name}/right_track"/>
+    <origin xyz="0 -0.24 -0.04" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Front Inspection Sensor Pod (RGB-D + Stereo Baseline) -->
+  <link name="${name}/sensor_pod">
+    <visual>
+      <geometry>
+        <cylinder radius="0.10" length="0.32"/>
+      </geometry>
+      <material name="sensor_glass"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.10" length="0.32"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="${name}_sensor_pod_joint" type="fixed">
+    <parent link="${name}/base_link"/>
+    <child link="${name}/sensor_pod"/>
+    <origin xyz="0.32 0 0.02" rpy="1.5707963 0 0"/>
+  </joint>
+
+  <!-- High-Intensity Inspection LED Illuminators -->
+  <link name="${name}/led_left">
+    <visual>
+      <geometry>
+        <sphere radius="0.04"/>
+      </geometry>
+      <material name="led_white"/>
+    </visual>
+  </link>
+  <joint name="${name}_led_left_joint" type="fixed">
+    <parent link="${name}/base_link"/>
+    <child link="${name}/led_left"/>
+    <origin xyz="0.34 0.18 0.06" rpy="0 0 0"/>
+  </joint>
+
+  <link name="${name}/led_right">
+    <visual>
+      <geometry>
+        <sphere radius="0.04"/>
+      </geometry>
+      <material name="led_white"/>
+    </visual>
+  </link>
+  <joint name="${name}_led_right_joint" type="fixed">
+    <parent link="${name}/base_link"/>
+    <child link="${name}/led_right"/>
+    <origin xyz="0.34 -0.18 0.06" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Top Status Beacon -->
+  <link name="${name}/beacon">
+    <visual>
+      <geometry>
+        <cylinder radius="0.035" length="0.08"/>
+      </geometry>
+      <material name="beacon_amber"/>
+    </visual>
+  </link>
+  <joint name="${name}_beacon_joint" type="fixed">
+    <parent link="${name}/base_link"/>
+    <child link="${name}/beacon"/>
+    <origin xyz="-0.15 0 0.12" rpy="0 0 0"/>
+  </joint>
+
+</robot>

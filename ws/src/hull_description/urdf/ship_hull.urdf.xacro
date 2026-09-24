@@ -1,0 +1,172 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="ship_hull">
+
+  <!-- Materials -->
+  <material name="hull_marine_steel">
+    <color rgba="0.22 0.28 0.35 1.0"/>
+  </material>
+  <material name="ocean_water_plane">
+    <color rgba="0.04 0.15 0.30 0.9"/>
+  </material>
+  <material name="hull_safety_coaming">
+    <color rgba="0.95 0.80 0.10 1.0"/>
+  </material>
+  <material name="hull_weld_seam">
+    <color rgba="0.15 0.18 0.22 1.0"/>
+  </material>
+
+  <!-- World Frame / Origin -->
+  <link name="hull_world"/>
+
+  <!-- Deep Ocean Plane behind the hull -->
+  <link name="ocean_water_link">
+    <visual>
+      <origin xyz="10.0 3.0 -0.25" rpy="0 0 0"/>
+      <geometry>
+        <box size="28.0 12.0 0.05"/>
+      </geometry>
+      <material name="ocean_water_plane"/>
+    </visual>
+  </link>
+  <joint name="ocean_water_joint" type="fixed">
+    <parent link="hull_world"/>
+    <child link="ocean_water_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Main Ship Hull Plate (20.0m x 6.0m surface) -->
+  <link name="hull_surface">
+    <visual>
+      <origin xyz="10.0 3.0 -0.06" rpy="0 0 0"/>
+      <geometry>
+        <box size="20.0 6.0 0.12"/>
+      </geometry>
+      <material name="hull_marine_steel"/>
+    </visual>
+    <collision>
+      <origin xyz="10.0 3.0 -0.06" rpy="0 0 0"/>
+      <geometry>
+        <box size="20.0 6.0 0.12"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="50000.0"/>
+      <inertia ixx="15000.0" ixy="0" ixz="0" iyy="160000.0" iyz="0" izz="175000.0"/>
+    </inertial>
+  </link>
+  <joint name="hull_surface_joint" type="fixed">
+    <parent link="hull_world"/>
+    <child link="hull_surface"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Visual Hull Perimeter Rub Rails / Coaming (Safety Borders) -->
+  <!-- Bottom border (Y = 0) -->
+  <link name="border_bottom">
+    <visual>
+      <origin xyz="10.0 0.0 0.04" rpy="0 0 0"/>
+      <geometry>
+        <box size="20.2 0.10 0.08"/>
+      </geometry>
+      <material name="hull_safety_coaming"/>
+    </visual>
+  </link>
+  <joint name="border_bottom_joint" type="fixed">
+    <parent link="hull_surface"/>
+    <child link="border_bottom"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Top border (Y = 6.0) -->
+  <link name="border_top">
+    <visual>
+      <origin xyz="10.0 6.0 0.04" rpy="0 0 0"/>
+      <geometry>
+        <box size="20.2 0.10 0.08"/>
+      </geometry>
+      <material name="hull_safety_coaming"/>
+    </visual>
+  </link>
+  <joint name="border_top_joint" type="fixed">
+    <parent link="hull_surface"/>
+    <child link="border_top"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Left border (X = 0) -->
+  <link name="border_left">
+    <visual>
+      <origin xyz="0.0 3.0 0.04" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.10 6.0 0.08"/>
+      </geometry>
+      <material name="hull_safety_coaming"/>
+    </visual>
+  </link>
+  <joint name="border_left_joint" type="fixed">
+    <parent link="hull_surface"/>
+    <child link="border_left"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Right border (X = 20.0) -->
+  <link name="border_right">
+    <visual>
+      <origin xyz="20.0 3.0 0.04" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.10 6.0 0.08"/>
+      </geometry>
+      <material name="hull_safety_coaming"/>
+    </visual>
+  </link>
+  <joint name="border_right_joint" type="fixed">
+    <parent link="hull_surface"/>
+    <child link="border_right"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Hull Structural Weld Seams / Plates Grid Lines -->
+  <link name="hull_grid_seams">
+    <visual>
+      <origin xyz="5.0 3.0 0.005" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.04 5.9 0.01"/>
+      </geometry>
+      <material name="hull_weld_seam"/>
+    </visual>
+    <visual>
+      <origin xyz="10.0 3.0 0.005" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.04 5.9 0.01"/>
+      </geometry>
+      <material name="hull_weld_seam"/>
+    </visual>
+    <visual>
+      <origin xyz="15.0 3.0 0.005" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.04 5.9 0.01"/>
+      </geometry>
+      <material name="hull_weld_seam"/>
+    </visual>
+    <visual>
+      <origin xyz="10.0 2.0 0.005" rpy="0 0 0"/>
+      <geometry>
+        <box size="19.9 0.04 0.01"/>
+      </geometry>
+      <material name="hull_weld_seam"/>
+    </visual>
+    <visual>
+      <origin xyz="10.0 4.0 0.005" rpy="0 0 0"/>
+      <geometry>
+        <box size="19.9 0.04 0.01"/>
+      </geometry>
+      <material name="hull_weld_seam"/>
+    </visual>
+  </link>
+  <joint name="hull_grid_joint" type="fixed">
+    <parent link="hull_surface"/>
+    <child link="hull_grid_seams"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+</robot>

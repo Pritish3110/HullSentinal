@@ -1,0 +1,7 @@
+string defect_id
+geometry_msgs/Point position
+float32 scan_radius
+---
+bool defect_present
+float32 residual_severity
+float32 confidence

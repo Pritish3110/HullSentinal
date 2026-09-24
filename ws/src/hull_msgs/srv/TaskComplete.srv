@@ -1,0 +1,6 @@
+string defect_id
+string robot_id
+bool reported_success
+---
+bool verification_triggered
+string message

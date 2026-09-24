@@ -1,0 +1,58 @@
+<?xml version="1.0" ?>
+<sdf version="1.8">
+  <world name="hull_world">
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.01</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!-- Sun Light -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>10 3 10 0 0 0</pose>
+      <diffuse>0.9 0.9 0.9 1</diffuse>
+      <specular>0.3 0.3 0.3 1</specular>
+      <direction>-0.3 -0.2 -1.0</direction>
+    </light>
+
+    <!-- Ambient underwater illumination -->
+    <light type="point" name="underwater_lamp">
+      <pose>10 3 2 0 0 0</pose>
+      <diffuse>0.2 0.5 0.7 1</diffuse>
+      <specular>0.1 0.2 0.3 1</specular>
+      <attenuation>
+        <range>30</range>
+        <constant>0.2</constant>
+        <linear>0.05</linear>
+      </attenuation>
+    </light>
+
+    <!-- Ship Hull Surface Model -->
+    <model name="ship_hull_plate">
+      <static>true</static>
+      <pose>10.0 3.0 -0.1 0 0 0</pose>
+      <link name="hull_link">
+        <visual name="hull_visual">
+          <geometry>
+            <box>
+              <size>20.0 6.0 0.2</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.2 0.25 0.3 1</ambient>
+            <diffuse>0.25 0.3 0.35 1</diffuse>
+            <specular>0.4 0.4 0.4 1</specular>
+          </material>
+        </visual>
+        <collision name="hull_collision">
+          <geometry>
+            <box>
+              <size>20.0 6.0 0.2</size>
+            </box>
+          </geometry>
+        </collision>
+      </link>
+    </model>
+
+  </world>
+</sdf>

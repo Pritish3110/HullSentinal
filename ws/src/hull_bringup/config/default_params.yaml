@@ -1,0 +1,17 @@
+/**:
+  ros__parameters:
+    weight_crack: 1.0
+    weight_rust: 0.70
+    weight_biofouling: 0.40
+    distance_alpha: 0.05
+    requeue_escalation: 0.15
+    max_linear_speed: 0.60
+    max_angular_speed: 1.20
+    clean_duration: 2.50
+    arrival_distance: 0.35
+    safety_radius: 0.55
+    detection_radius: 1.50
+    tool_radius: 0.40
+    cleaning_rate: 0.40
+    sensor_noise_std: 0.05
+    cleaning_failure_rate: 0.0

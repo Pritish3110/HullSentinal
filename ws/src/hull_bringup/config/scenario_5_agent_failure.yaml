@@ -1,0 +1,20 @@
+# Scenario 5: Agent Tool Failure & Stubborn Biofouling
+sim_engine_node:
+  ros__parameters:
+    scenario_name: "agent_failure"
+    num_cleaners: 1
+    sensor_noise_std: 0.05
+    cleaning_failure_rate: 0.35
+    current_disturbance_x: 0.0
+    current_disturbance_y: 0.0
+    cleaning_rate: 0.25
+    tool_radius: 0.40
+    detection_radius: 1.50
+
+verification_monitor:
+  ros__parameters:
+    residual_threshold: 0.08
+
+utility_scorer:
+  ros__parameters:
+    requeue_escalation: 0.25

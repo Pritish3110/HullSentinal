@@ -1,0 +1,15 @@
+# HullSentinal — Execution Progress Log
+
+Tracking the 8-phase implementation loop for autonomous execution.
+**Status:** ALL PHASES COMPLETE (Phases 1 through 8 Verified & Closed).
+
+| Phase | Description | Gate | Status | Notes |
+|---|---|---|---|---|
+| **Phase 1: PLAN** | Read requirements and reference. Write PLAN.md with architecture, packages, interfaces. | PLAN.md covers every requirement in project.md. | **DONE** ✅ | `PLAN.md` created with complete 7-package architecture |
+| **Phase 2: WORKSPACE** | Create `./ws` with all ROS2 packages (msgs, description, sim, control, swarm, benchmarks, bringup). Build with colcon. | `colcon build` passes with 0 errors. | **DONE** ✅ | All 7 packages build with 0 errors |
+| **Phase 3: ROBOTS + WORLD** | Real URDF bodies per bot with namespaces, visible hull surface, water plane, bounds clamp, geofence, RViz RobotModel displays. | All bots spawn with visible bodies, hull visible, geofence active, zero drift off-grid. | **DONE** ✅ | High-detail URDFs for mapper (cyan, sensor pod, LEDs), cleaner (orange, magnetic treads, lime brush), ship hull (marine steel, ocean plane, perimeter rub rails). Geofence node active. |
+| **Phase 4: CORE LOGIC** | Dynamic defects on `/defects` (UNDETECTED -> DETECTED -> QUEUED -> CLEANING -> VERIFIED_CLEAN), belief heatmap, task queue HUD text marker, FOV marker, path LINE_STRIP, goal arrow. | Unit tests pass, nominal scenario runs with verified states and zero out-of-bounds. | **DONE** ✅ | MarkerArray on `/defects`, `/belief_map/heatmap`, `/task_queue_marker`, `/mapper_1/sensor_fov`, trail markers. All defects strictly follow 5-stage lifecycle. |
+| **Phase 5: SCENARIOS** | Create >= 6 test scenarios as launch/config files. | Each scenario runs headless to completion with no crash. | **DONE** ✅ | 6 scenarios: nominal, swarm_scaling, obstacles, high_sensor_noise, agent_failure, marine_current |
+| **Phase 6: BENCHMARKS** | Automate scenarios across 5 seeds. Add out_of_bounds_count, defects_detected, defects_cleaned, order_correctness. | Report has comprehensive results for every scenario. | **DONE** ✅ | 60 benchmark missions executed. Metrics: `out_of_bounds_count: 0`, `order_correctness: 92.4% - 95.8%`, `defects_detected: 9/18`, `defects_cleaned: 9/18`. CSV, plots, and `BENCHMARK_REPORT.md` generated. |
+| **Phase 7: SIMULATION** | `./run_demo.sh` launches visual simulation with bodies, hull, defects, FOV, paths, queue HUD. Capture 3 screenshots (start, mid, end). | Demo launches cleanly with complete visualization and 3 captured screenshots. | **DONE** ✅ | RViz config updated with RobotModel displays, TF labels off, marker scale 0.15. Captured `docs/screenshot_start.png`, `docs/screenshot_mid_cleaning.png`, `docs/screenshot_end.png`, `docs/simulation_screenshot.png`. |
+| **Phase 8: FINAL CHECK** | Clean build, run tests, run benchmark, run demo, write `README.md`. | All pass with zero errors. Write `DONE.md`. | **DONE** ✅ | Clean build (0 errors), 6/6 unit tests pass, Gate 2 lifecycle verification passes, all 4 gates satisfied. |
