@@ -1,21 +1,40 @@
 #!/usr/bin/env python3
 """
-Tool Controller Node
-Executes the cleaning robot high-level state machine:
-IDLE -> NAVIGATING -> CLEANING -> REPORTING -> IDLE
-Interacts with task queue, crawler controller, and verification service.
-Publishes CLEANING belief update when cleaning cycle begins.
+HullSentinal V2 — Tool Controller Node
+High-level cognitive cleaning executive implementing:
+1. Explicit Enums & State Machine:
+   (WAITING_FOR_LANE, IDLE, NAVIGATING, CLEANING, EMERGENCY_NAVIGATING, EMERGENCY_CLEANING, VERIFYING, COMPLETED).
+2. Priority context stack for immediate CRITICAL defect emergency interruption & resume.
+3. Waypoint-by-waypoint path following via A* grid planner.
+4. Closed-loop verification handshake (/task_complete -> Rescan -> VERIFIED_CLEAN).
 """
 
+import os
 import math
 import time
+import yaml
+import traceback
+from enum import Enum
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Bool
+from ament_index_python.packages import get_package_share_directory
 
-from hull_msgs.msg import TaskQueue, BeliefUpdate
+from hull_msgs.msg import TaskQueue, TaskItem, BeliefUpdate, LaneCoordination
 from hull_msgs.srv import TaskComplete
+from hull_control.grid_planner import GridPlanner
+
+
+class CleanerState(Enum):
+    WAITING_FOR_LANE = 'WAITING_FOR_LANE'
+    IDLE = 'IDLE'
+    NAVIGATING = 'NAVIGATING'
+    CLEANING = 'CLEANING'
+    EMERGENCY_NAVIGATING = 'EMERGENCY_NAVIGATING'
+    EMERGENCY_CLEANING = 'EMERGENCY_CLEANING'
+    VERIFYING = 'VERIFYING'
+    COMPLETED = 'COMPLETED'
 
 
 class ToolController(Node):
@@ -23,121 +42,305 @@ class ToolController(Node):
         super().__init__('tool_controller')
 
         self.declare_parameter('robot_id', 'cleaner_1')
-        self.declare_parameter('clean_duration', 2.8)
+        self.declare_parameter('config_file', '')
         self.declare_parameter('arrival_distance', 0.40)
 
         self.robot_id = self.get_parameter('robot_id').get_parameter_value().string_value
-        self.clean_duration = self.get_parameter('clean_duration').get_parameter_value().double_value
         self.arrival_dist = self.get_parameter('arrival_distance').get_parameter_value().double_value
 
-        self.state = 'IDLE'
-        self.current_task = None
+        # Load master config
+        self.cfg = self._load_config()
+        cleaner_cfg = self.cfg.get('robots', {}).get(self.robot_id, {})
+        self.clean_duration = float(cleaner_cfg.get('clean_duration', 1.00))
+
+        # Build A* Grid Planner
+        world_cfg = self.cfg.get('world', {})
+        hw = float(world_cfg.get('hull_width', 24.0))
+        hh = float(world_cfg.get('hull_height', 8.0))
+        margin = float(world_cfg.get('safety_margin', 0.8))
+        obstacles = self.cfg.get('static_obstacles', [])
+        self.grid_planner = GridPlanner(
+            hull_width=hw,
+            hull_height=hh,
+            resolution=0.20,
+            inflation_radius=0.55,
+            safety_margin=margin,
+            obstacles=obstacles
+        )
+
+        # State machine initialization
+        self.state = CleanerState.WAITING_FOR_LANE
         self.current_pose = None
-        self.clean_start_time = 0.0
+        self.current_task = None
+        self.current_path = []
+        self.current_path_idx = 0
+        self.cleaning_start_time = 0.0
+        self.waiting_for_service = False
+        self.released_cleaner_lane = 0
+
+        # Context stack for emergency preemption
+        self.context_stack = []
 
         # Subscriptions
         self.pose_sub = self.create_subscription(
             PoseStamped, f'/{self.robot_id}/pose', self._pose_cb, 10)
         self.queue_sub = self.create_subscription(
             TaskQueue, '/task_queue', self._queue_cb, 10)
+        self.lane_coord_sub = self.create_subscription(
+            LaneCoordination, '/lane_coordination/events', self._lane_coord_cb, 10)
 
         # Publishers
         self.goal_pub = self.create_publisher(
             PoseStamped, f'/{self.robot_id}/target_goal', 10)
-        self.tool_cmd_pub = self.create_publisher(
+        self.tool_pub = self.create_publisher(
             Bool, f'/{self.robot_id}/tool_cmd', 10)
         self.belief_pub = self.create_publisher(
             BeliefUpdate, '/belief_updates', 20)
 
-        # Service client for task completion
+        # Service Client for Verification Handshake
         self.complete_cli = self.create_client(TaskComplete, '/task_complete')
 
-        # State machine update loop (10 Hz)
-        self.timer = self.create_timer(0.1, self._state_loop)
-        self.get_logger().info(f'ToolController active for {self.robot_id}')
+        # Control loop timer (10 Hz)
+        self.timer = self.create_timer(0.1, self._state_machine_loop)
+        self.get_logger().info(
+            f'[CLEANER] ToolController V2 initialized for {self.robot_id}. '
+            f'State: {self.state.value} (waiting for Lane 1 release).'
+        )
 
-    def _pose_cb(self, msg):
-        self.current_pose = msg.pose
+    def _load_config(self):
+        custom_path = self.get_parameter('config_file').get_parameter_value().string_value
+        candidate_paths = [
+            custom_path,
+            os.path.join(get_package_share_directory('hull_bringup'), 'config', 'hullsentinal_v2.yaml')
+            if 'hull_bringup' in os.environ.get('AMENT_PREFIX_PATH', '') else '',
+            '/home/pritish_3110/Personal Files/Syllabus/Projects/HullSentinal/ws/src/hull_bringup/config/hullsentinal_v2.yaml',
+        ]
+        for path in candidate_paths:
+            if path and os.path.exists(path):
+                with open(path, 'r') as f:
+                    return yaml.safe_load(f)
+        return {}
 
-    def _queue_cb(self, msg):
-        if self.state == 'IDLE' and msg.tasks:
-            # Pick highest priority task that is QUEUED
+    def _pose_cb(self, msg: PoseStamped):
+        self.current_pose = (msg.pose.position.x, msg.pose.position.y)
+
+    def _lane_coord_cb(self, msg: LaneCoordination):
+        self.released_cleaner_lane = max(self.released_cleaner_lane, msg.released_cleaner_lane)
+        if self.state == CleanerState.WAITING_FOR_LANE and self.released_cleaner_lane >= 1:
+            self.state = CleanerState.IDLE
+            self.get_logger().info(
+                f"[COORDINATION] Cleaner transitioned: WAITING_FOR_LANE -> IDLE (Lane {self.released_cleaner_lane} released)."
+            )
+
+    def _queue_cb(self, msg: TaskQueue):
+        if not self.current_pose or not msg.tasks:
+            return
+
+        # Check for immediate CRITICAL emergency defect in the queue
+        for task in msg.tasks:
+            if task.emergency_flag or (task.risk_level == 'CRITICAL'):
+                if task.status not in ('VERIFIED_CLEAN', 'CLEANING') and (
+                    self.current_task is None or self.current_task.defect_id != task.defect_id
+                ):
+                    self._trigger_emergency_interruption(task)
+                    return
+
+        # Normal task dispatch when IDLE
+        if self.state in (CleanerState.IDLE, CleanerState.WAITING_FOR_LANE):
             for task in msg.tasks:
-                if task.status in ('QUEUED', 'RE_QUEUED'):
-                    self.current_task = task
-                    self.state = 'NAVIGATING'
-                    # Dispatch goal
-                    ps = PoseStamped()
-                    ps.header.stamp = self.get_clock().now().to_msg()
-                    ps.header.frame_id = 'hull_world'
-                    ps.pose.position = task.position
-                    self.goal_pub.publish(ps)
-                    self.get_logger().info(f"[{self.robot_id}] Assigned task {task.defect_id} (utility: {task.utility_score:.2f}) -> NAVIGATING")
+                if task.status in ('QUEUED', 'RE_QUEUED', 'DETECTED') and task.eligible:
+                    self._dispatch_task(task)
                     break
 
-    def _state_loop(self):
-        if not self.current_pose or not self.current_task:
+    def _trigger_emergency_interruption(self, emergency_task: TaskItem):
+        """Preempts ongoing task, pushes context to stack, and navigates to emergency defect."""
+        if self.current_task and self.current_task.defect_id == emergency_task.defect_id:
+            return  # Already addressing this emergency
+
+        self.get_logger().warning(
+            f"[EMERGENCY] CRITICAL DEFECT DETECTED: {emergency_task.defect_id} (sev={emergency_task.severity:.2f}) "
+            f"in Lane {emergency_task.lane_id}! Interrupting current cleaner activity."
+        )
+
+        # Halt cleaning brush
+        self._set_tool(False)
+
+        # Push current context to stack if active
+        if self.state in (CleanerState.NAVIGATING, CleanerState.CLEANING) and self.current_task:
+            context = {
+                'task': self.current_task,
+                'state': self.state,
+                'path': self.current_path,
+                'path_idx': self.current_path_idx,
+            }
+            self.context_stack.append(context)
+            self.get_logger().info(
+                f"[EMERGENCY] Saved context for task {self.current_task.defect_id} to stack "
+                f"(depth: {len(self.context_stack)})."
+            )
+
+        # Plan fresh A* path to emergency defect from current position
+        gx, gy = emergency_task.position.x, emergency_task.position.y
+        path = self.grid_planner.plan_path(self.current_pose, (gx, gy))
+
+        self.current_task = emergency_task
+        self.current_path = path
+        self.current_path_idx = 0
+        self.state = CleanerState.EMERGENCY_NAVIGATING
+
+        self.get_logger().warning(
+            f"[EMERGENCY] State -> EMERGENCY_NAVIGATING. Executing A* path to {emergency_task.defect_id} "
+            f"({len(path)} waypoints, length={self.grid_planner.get_path_length(self.current_pose, (gx, gy)):.2f}m)."
+        )
+
+        # Dispatch first waypoint
+        self._dispatch_current_waypoint()
+
+    def _dispatch_task(self, task: TaskItem):
+        """Initiates normal cleaning mission for eligible task."""
+        gx, gy = task.position.x, task.position.y
+        path = self.grid_planner.plan_path(self.current_pose, (gx, gy))
+        path_len = self.grid_planner.get_path_length(self.current_pose, (gx, gy))
+
+        self.current_task = task
+        self.current_path = path
+        self.current_path_idx = 0
+        self.state = CleanerState.NAVIGATING
+
+        self.get_logger().info(
+            f"[CLEANER] Dispatched task {task.defect_id} ({task.defect_type}) Lane {task.lane_id} | "
+            f"A* Path: {len(path)} waypoints, length={path_len:.2f}m."
+        )
+
+        # Dispatch first waypoint
+        self._dispatch_current_waypoint()
+
+    def _dispatch_current_waypoint(self):
+        if self.current_path_idx < len(self.current_path):
+            wx, wy = self.current_path[self.current_path_idx]
+            goal_msg = PoseStamped()
+            goal_msg.header.stamp = self.get_clock().now().to_msg()
+            goal_msg.header.frame_id = 'hull_world'
+            goal_msg.pose.position.x = float(wx)
+            goal_msg.pose.position.y = float(wy)
+            goal_msg.pose.position.z = 0.05
+            goal_msg.pose.orientation.w = 1.0
+            self.goal_pub.publish(goal_msg)
+
+    def _set_tool(self, active: bool):
+        t_msg = Bool()
+        t_msg.data = active
+        self.tool_pub.publish(t_msg)
+
+    def _state_machine_loop(self):
+        if not self.current_pose:
             return
 
-        x = self.current_pose.position.x
-        y = self.current_pose.position.y
-        tx = self.current_task.position.x
-        ty = self.current_task.position.y
-        dist = math.hypot(tx - x, ty - y)
+        cx, cy = self.current_pose
 
-        if self.state == 'NAVIGATING':
-            if dist <= self.arrival_dist:
-                # Arrived at defect site -> CLEANING
-                self.state = 'CLEANING'
-                self.clean_start_time = time.time()
-                # Activate cleaning tool
-                self.tool_cmd_pub.publish(Bool(data=True))
+        # 1. Navigation States: NAVIGATING or EMERGENCY_NAVIGATING
+        if self.state in (CleanerState.NAVIGATING, CleanerState.EMERGENCY_NAVIGATING):
+            if not self.current_task or not self.current_path:
+                self.state = CleanerState.IDLE
+                return
 
-                # Publish BeliefUpdate -> CLEANING
-                b_msg = BeliefUpdate()
-                b_msg.defect_id = self.current_task.defect_id
-                b_msg.status = 'CLEANING'
-                b_msg.severity = 0.5
-                b_msg.confidence = 0.95
-                b_msg.stamp = self.get_clock().now().to_msg()
-                self.belief_pub.publish(b_msg)
+            if self.current_path_idx < len(self.current_path):
+                wx, wy = self.current_path[self.current_path_idx]
+                dist_to_wp = math.hypot(wx - cx, wy - cy)
 
-                self.get_logger().info(f"[{self.robot_id}] Reached defect {self.current_task.defect_id} -> Tool Active -> CLEANING")
+                if dist_to_wp < self.arrival_dist:
+                    self.current_path_idx += 1
+                    if self.current_path_idx < len(self.current_path):
+                        # Advance to next A* waypoint
+                        self._dispatch_current_waypoint()
+                    else:
+                        # Final waypoint reached! Transition to active cleaning
+                        is_emergency = (self.state == CleanerState.EMERGENCY_NAVIGATING)
+                        self.state = CleanerState.EMERGENCY_CLEANING if is_emergency else CleanerState.CLEANING
 
-        elif self.state == 'CLEANING':
-            elapsed = time.time() - self.clean_start_time
+                        if is_emergency:
+                            self.get_logger().warning(
+                                f"[EMERGENCY] Arrived at emergency defect {self.current_task.defect_id}. "
+                                "Activating cavitation tool for priority remediation."
+                            )
+                        else:
+                            self.get_logger().info(
+                                f"[CLEANER] Arrived at defect {self.current_task.defect_id}. "
+                                "Activating cavitation cleaning tool."
+                            )
+
+                        self._set_tool(True)
+                        self.cleaning_start_time = time.time()
+
+                        # Emit CLEANING status update
+                        b_up = BeliefUpdate()
+                        b_up.defect_id = self.current_task.defect_id
+                        b_up.status = 'CLEANING'
+                        b_up.severity = float(self.current_task.severity)
+                        b_up.confidence = 0.95
+                        b_up.lane_id = int(self.current_task.lane_id)
+                        b_up.risk_level = self.current_task.risk_level
+                        b_up.emergency_flag = self.current_task.emergency_flag
+                        b_up.eligible_lane = True
+                        b_up.assigned_robot = self.robot_id
+                        b_up.stamp = self.get_clock().now().to_msg()
+                        self.belief_pub.publish(b_up)
+
+        # 2. Active Cleaning States: CLEANING or EMERGENCY_CLEANING
+        elif self.state in (CleanerState.CLEANING, CleanerState.EMERGENCY_CLEANING):
+            elapsed = time.time() - self.cleaning_start_time
             if elapsed >= self.clean_duration:
-                # Deactivate cleaning tool
-                self.tool_cmd_pub.publish(Bool(data=False))
-                self.state = 'REPORTING'
-                self.get_logger().info(f"[{self.robot_id}] Cleaning cycle finished -> Calling /task_complete")
-                self._report_complete()
+                # Dwell time complete
+                self._set_tool(False)
+                self.state = CleanerState.VERIFYING
+                self.get_logger().info(
+                    f"[CLEANER] Dwell time elapsed ({self.clean_duration:.1f}s) on {self.current_task.defect_id}. "
+                    "Tool DEACTIVATED. Calling /task_complete service for closed-loop rescan."
+                )
+                self._call_task_complete()
 
-        elif self.state == 'REPORTING':
-            pass
-
-    def _report_complete(self):
+    def _call_task_complete(self):
         if not self.complete_cli.service_is_ready():
-            self.get_logger().warning('/task_complete service not available yet, waiting...')
+            self.get_logger().warning('/task_complete service not available; retrying...')
             return
 
+        self.waiting_for_service = True
         req = TaskComplete.Request()
         req.defect_id = self.current_task.defect_id
         req.robot_id = self.robot_id
         req.reported_success = True
 
         future = self.complete_cli.call_async(req)
-        future.add_done_callback(self._report_response_cb)
+        future.add_done_callback(lambda f: self._complete_done_cb(f, self.current_task.defect_id))
 
-    def _report_response_cb(self, future):
+    def _complete_done_cb(self, future, d_id):
+        self.waiting_for_service = False
         try:
             res = future.result()
-            self.get_logger().info(f"[{self.robot_id}] /task_complete response: {res.message}")
+            if res.verification_triggered:
+                self.get_logger().info(
+                    f"[VERIFICATION] Handshake confirmed for {d_id}: {res.message}"
+                )
+            else:
+                self.get_logger().warning(
+                    f"[VERIFICATION] Handshake reported verification not triggered for {d_id}."
+                )
         except Exception as e:
-            self.get_logger().error(f"[{self.robot_id}] /task_complete call failed: {e}")
-        finally:
+            self.get_logger().error(f'[CLEANER] /task_complete service call failed: {e}')
+
+        # Check if we were handling an emergency and have a suspended context to resume
+        if self.context_stack:
+            prev_context = self.context_stack.pop()
+            self.get_logger().info(
+                f"[EMERGENCY] Resuming suspended context for task {prev_context['task'].defect_id} "
+                f"from current cleaner position."
+            )
+            # Replan fresh A* path from current position to suspended task
+            self._dispatch_task(prev_context['task'])
+        else:
             self.current_task = None
-            self.state = 'IDLE'
+            self.current_path = []
+            self.state = CleanerState.IDLE
 
 
 def main(args=None):
@@ -148,8 +351,9 @@ def main(args=None):
             rclpy.spin(node)
         except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
             pass
-        except Exception:
-            pass
+        except Exception as e:
+            node.get_logger().error(f'[CLEANER] Uncaught exception in spin: {e}')
+            traceback.print_exc()
         finally:
             try:
                 node.destroy_node()
@@ -157,8 +361,8 @@ def main(args=None):
                 pass
             if rclpy.ok():
                 rclpy.shutdown()
-    except Exception:
-        pass
+    except Exception as e:
+        traceback.print_exc()
 
 
 if __name__ == '__main__':

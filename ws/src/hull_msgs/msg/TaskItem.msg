@@ -8,3 +8,5 @@ string risk_level
 bool emergency_flag
 bool eligible
 float32 path_cost
+float32 severity
+float32 confidence

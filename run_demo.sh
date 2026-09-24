@@ -45,7 +45,7 @@ echo "[HullSentinal Demo] GUI Mode: ${GUI_MODE}"
 echo "[HullSentinal Demo] Launching simulation stack..."
 
 # 3. Clean up any previous dangling nodes
-pkill -f "sim_engine_node|belief_map_node|utility_scorer|verification_monitor|crawler_controller|tool_controller|safety_barrier|geofence_node|marker_publisher|demo_snapshot" 2>/dev/null || true
+pkill -f "sim_engine_node|belief_map_node|lane_coordinator_node|utility_scorer|verification_monitor|mapper_controller|crawler_controller|tool_controller|safety_barrier|geofence_node|marker_publisher|demo_snapshot" 2>/dev/null || true
 
 # 4. Trap termination signals for clean shutdown
 LAUNCH_PID=""
@@ -62,7 +62,7 @@ cleanup() {
         done
         kill -TERM "${LAUNCH_PID}" 2>/dev/null || true
     fi
-    pkill -f "sim_engine_node|belief_map_node|utility_scorer|verification_monitor|crawler_controller|tool_controller|safety_barrier|geofence_node|marker_publisher|demo_snapshot" 2>/dev/null || true
+    pkill -f "sim_engine_node|belief_map_node|lane_coordinator_node|utility_scorer|verification_monitor|mapper_controller|crawler_controller|tool_controller|safety_barrier|geofence_node|marker_publisher|demo_snapshot" 2>/dev/null || true
     echo "[HullSentinal Demo] Shutdown complete."
     exit 0
 }

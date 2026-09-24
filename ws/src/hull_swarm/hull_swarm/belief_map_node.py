@@ -383,6 +383,8 @@ class BeliefMapNode(Node):
                 item.emergency_flag = bool(d['emergency_flag'])
                 item.eligible = bool(d['eligible_lane'])
                 item.path_cost = 0.0
+                item.severity = float(d['severity'])
+                item.confidence = float(d['confidence'])
                 tasks.append(item)
 
         msg.tasks = tasks

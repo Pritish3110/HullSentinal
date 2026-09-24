@@ -1,9 +1,21 @@
 #!/usr/bin/env python3
 """
-HullSentinal Full System Launch File
-Brings up complete closed-loop cognitive robotics pipeline:
-Simulation Engine + Description TFs + Motion Controllers +
-Belief Map + Utility Scorer + Verification Monitor + Markers + (Optional) RViz2
+HullSentinal V2 Full System Launch File
+Brings up complete cognitive multi-robot ship hull inspection and cleaning pipeline:
+1. URDF robot_state_publishers for hull, mapper_1, and cleaner_1
+2. Simulation Engine (physics, 14 defects, deterministic crack escalation)
+3. Belief Map Node (SQLAlchemy world state, lifecycle tracking)
+4. Lane Coordinator Node (mapper-cleaner lane synchronization & emergency override)
+5. Utility Scorer Node (8-connected A* path cost + risk weighting)
+6. Verification Monitor Node (closed-loop inspection rescan handshake)
+7. Mapper Controller Node (deterministic 3-lane serpentine sweep + obstacle detours)
+8. Cleaner Crawler Controller Node (A* waypoint following & perimeter safety)
+9. Cleaner Tool Controller Node (state machine, priority context stack, cavitation tool)
+10. Safety Barrier Node (predictive conflict detection, mapper priority, deadlock sidestep)
+11. Geofence Node (24m x 8m manifold perimeter watchdog)
+12. Single-Owner Marker Publisher (stable IDs, delete-all, 24x8m heatmap, ASCII HUD)
+13. Demo Snapshot Node (captures high-res visual evidence to docs/)
+14. RViz2 GUI (optional when gui:=true)
 """
 
 import os
@@ -21,14 +33,17 @@ def generate_launch_description():
     desc_dir = get_package_share_directory('hull_description')
 
     rviz_config_file = os.path.join(bringup_dir, 'config', 'rviz_config.rviz')
+    master_config_file = os.path.join(bringup_dir, 'config', 'hullsentinal_v2.yaml')
 
     gui_arg = DeclareLaunchArgument('gui', default_value='false', description='Launch RViz2 GUI')
     num_cleaners_arg = DeclareLaunchArgument('num_cleaners', default_value='1', description='Number of cleaning robots')
     scenario_arg = DeclareLaunchArgument('scenario', default_value='nominal', description='Scenario name')
+    config_arg = DeclareLaunchArgument('config_file', default_value=master_config_file, description='Path to master configuration YAML')
 
     gui = LaunchConfiguration('gui')
     num_cleaners = LaunchConfiguration('num_cleaners')
     scenario = LaunchConfiguration('scenario')
+    config_file = LaunchConfiguration('config_file')
 
     # 1. Robot Descriptions (URDF / State Publishers)
     desc_launch = IncludeLaunchDescription(
@@ -42,6 +57,7 @@ def generate_launch_description():
         name='sim_engine_node',
         output='screen',
         parameters=[{
+            'config_file': config_file,
             'num_cleaners': num_cleaners,
             'scenario_name': scenario,
             'dt': 0.05
@@ -53,18 +69,31 @@ def generate_launch_description():
         package='hull_swarm',
         executable='belief_map_node',
         name='belief_map_node',
+        output='screen',
+        parameters=[{'config_file': config_file}]
+    )
+
+    # 4. Cognition: Lane Coordinator Node
+    coord_node = Node(
+        package='hull_swarm',
+        executable='lane_coordinator_node',
+        name='lane_coordinator_node',
         output='screen'
     )
 
-    # 4. Cognition: Utility Scorer Node
+    # 5. Cognition: Utility Scorer Node
     utility_node = Node(
         package='hull_swarm',
         executable='utility_scorer',
         name='utility_scorer',
-        output='screen'
+        output='screen',
+        parameters=[{
+            'config_file': config_file,
+            'cleaner_robot_id': 'cleaner_1'
+        }]
     )
 
-    # 5. Cognition: Verification Monitor Node
+    # 6. Cognition: Verification Monitor Node
     verification_node = Node(
         package='hull_swarm',
         executable='verification_monitor',
@@ -72,20 +101,20 @@ def generate_launch_description():
         output='screen'
     )
 
-    # 6. Control: Mapper Crawler Controller (Lawnmower sweep)
+    # 7. Control: Mapper Controller (Serpentine sweep with obstacle detours)
     mapper_ctrl = Node(
         package='hull_control',
-        executable='crawler_controller',
-        name='mapper_crawler_controller',
+        executable='mapper_controller',
+        name='mapper_controller',
         output='screen',
         parameters=[{
             'robot_id': 'mapper_1',
-            'role': 'mapper',
-            'max_linear_speed': 1.50
+            'config_file': config_file,
+            'goal_tolerance': 0.35
         }]
     )
 
-    # 7. Control: Cleaner 1 Crawler Controller (P2P Navigation)
+    # 8. Control: Cleaner 1 Crawler Controller (A* Waypoint Pursuit)
     cleaner_ctrl = Node(
         package='hull_control',
         executable='crawler_controller',
@@ -94,11 +123,12 @@ def generate_launch_description():
         parameters=[{
             'robot_id': 'cleaner_1',
             'role': 'cleaner',
-            'max_linear_speed': 1.60
+            'config_file': config_file,
+            'goal_tolerance': 0.30
         }]
     )
 
-    # 8. Control: Cleaner 1 Tool State Machine
+    # 9. Control: Cleaner 1 Tool State Machine & Emergency Context Stack
     cleaner_tool = Node(
         package='hull_control',
         executable='tool_controller',
@@ -106,54 +136,48 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'robot_id': 'cleaner_1',
-            'clean_duration': 0.90
+            'config_file': config_file,
+            'arrival_distance': 0.40
         }]
     )
 
-    # 9. Control: Inter-Robot Safety Barrier
+    # 10. Control: Inter-Robot Dynamic Safety Barrier
     safety_node = Node(
         package='hull_control',
         executable='safety_barrier',
         name='safety_barrier',
         output='screen',
-        parameters=[{
-            'robots': ['mapper_1', 'cleaner_1'],
-            'safety_radius': 0.55
-        }]
+        parameters=[{'config_file': config_file}]
     )
 
-    # 10. Control: Geofence Monitor Node
+    # 11. Control: Geofence Monitor Node (24m x 8m manifold watchdog)
     geofence_node = Node(
         package='hull_control',
         executable='geofence_node',
         name='geofence_node',
         output='screen',
-        parameters=[{
-            'robots': ['mapper_1', 'cleaner_1'],
-            'x_min': 0.8,
-            'x_max': 19.2,
-            'y_min': 0.8,
-            'y_max': 5.2
-        }]
+        parameters=[{'config_file': config_file}]
     )
 
-    # 11. Visualization Marker Publisher
+    # 12. Visualization: Single-Owner Marker Publisher
     marker_node = Node(
         package='hull_bringup',
         executable='marker_publisher',
         name='marker_publisher',
-        output='screen'
+        output='screen',
+        parameters=[{'config_file': config_file}]
     )
 
-    # 12. Visual Demo Snapshot Node
+    # 13. Visual Demo Snapshot Node
     snapshot_node = Node(
         package='hull_bringup',
         executable='demo_snapshot',
         name='demo_snapshot',
-        output='screen'
+        output='screen',
+        parameters=[{'config_file': config_file}]
     )
 
-    # 13. RViz2 (GUI condition)
+    # 14. RViz2 (GUI condition)
     rviz_node = Node(
         package='rviz2',
         executable='rviz2',
@@ -167,9 +191,11 @@ def generate_launch_description():
         gui_arg,
         num_cleaners_arg,
         scenario_arg,
+        config_arg,
         desc_launch,
         sim_node,
         belief_node,
+        coord_node,
         utility_node,
         verification_node,
         mapper_ctrl,
