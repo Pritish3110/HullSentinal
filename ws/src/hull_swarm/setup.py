@@ -21,6 +21,7 @@ setup(
             'belief_map_node = hull_swarm.belief_map_node:main',
             'utility_scorer = hull_swarm.utility_scorer:main',
             'verification_monitor = hull_swarm.verification_monitor:main',
+            'lane_coordinator_node = hull_swarm.lane_coordinator_node:main',
         ],
     },
 )
