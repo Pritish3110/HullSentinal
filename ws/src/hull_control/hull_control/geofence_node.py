@@ -44,6 +44,7 @@ class GeofenceNode(Node):
         self.poses = {}
         self.out_of_bounds_count = 0
         self.warning_count = 0
+        self.all_in_bounds = True
 
         # Subscriptions for robot poses
         self.subs = {}
@@ -81,7 +82,7 @@ class GeofenceNode(Node):
         self.poses[rid] = (msg.pose.position.x, msg.pose.position.y)
 
     def _monitor_loop(self):
-        all_in_bounds = True
+        self.all_in_bounds = True
         robot_status = {}
 
         for rid, pos in self.poses.items():
@@ -94,7 +95,7 @@ class GeofenceNode(Node):
 
             if not in_hard:
                 self.out_of_bounds_count += 1
-                all_in_bounds = False
+                self.all_in_bounds = False
                 status = 'CRITICAL_OOB'
                 self.get_logger().error(
                     f"[SAFETY] GEOFENCE BREACH: {rid} breached hard hull bounds at ({x:.2f}, {y:.2f})!"
@@ -116,7 +117,7 @@ class GeofenceNode(Node):
         status_msg = {
             'out_of_bounds_count': self.out_of_bounds_count,
             'warning_count': self.warning_count,
-            'all_in_bounds': all_in_bounds,
+            'all_in_bounds': self.all_in_bounds,
             'robots': robot_status
         }
 

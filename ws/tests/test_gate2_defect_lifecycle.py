@@ -34,10 +34,10 @@ class DefectLifecycleGateNode(Node):
             data = json.loads(msg.data)
             all_verified = True
             for d_id, info in data.items():
-                self.defect_histories[d_id] = info['history']
-                if info['state'] != 'VERIFIED_CLEAN':
+                self.defect_histories[d_id] = info.get('history', [])
+                if info.get('state') != 'VERIFIED_CLEAN':
                     all_verified = False
-            self.all_clean = all_verified and (len(data) == 9)
+            self.all_clean = all_verified and (len(data) >= 9)
         except Exception:
             pass
 

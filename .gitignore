@@ -5,3 +5,9 @@ __pycache__/
 *.pyc
 .env
 .env.*
+*.Rhistory
+.Rhistory
+.DS_Store
+*.swp
+*.swo
+*~
