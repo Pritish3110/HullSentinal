@@ -6,6 +6,7 @@ On /task_complete service call, requests a re-scan from the mapper,
 evaluates residual defect severity, and transitions task to VERIFIED_CLEAN or RE_QUEUED.
 """
 
+import traceback
 import rclpy
 from rclpy.node import Node
 
@@ -93,24 +94,28 @@ class VerificationMonitor(Node):
 
 
 def main(args=None):
+    rclpy.init(args=args)
+    node = None
+    exit_code = 0
     try:
-        rclpy.init(args=args)
         node = VerificationMonitor()
-        try:
-            rclpy.spin(node)
-        except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
-            pass
-        except Exception:
-            pass
-        finally:
-            try:
-                node.destroy_node()
-            except Exception:
-                pass
-            if rclpy.ok():
-                rclpy.shutdown()
-    except Exception:
+        rclpy.spin(node)
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
+    except Exception:
+        # Never swallow a fatal error: a silent exit makes a dead node look healthy.
+        if node is not None:
+            node.get_logger().fatal('[Verification] Fatal error, shutting down:\n' + traceback.format_exc())
+        else:
+            traceback.print_exc()
+        exit_code = 1
+    finally:
+        if node is not None:
+            node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+    if exit_code:
+        raise SystemExit(exit_code)
 
 
 if __name__ == '__main__':

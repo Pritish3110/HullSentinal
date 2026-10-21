@@ -14,11 +14,13 @@ import os
 import time
 import math
 import yaml
+import traceback
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import MarkerArray
 from std_msgs.msg import Bool
+from hull_msgs.msg import LaneCoordination, MissionStatus
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -47,6 +49,8 @@ class DemoSnapshotNode(Node):
         self.defects = {}
         self.tool_active = False
         self.emergency_triggered = False
+        self.released_lane = 0
+        self.all_clean = False
         self.start_time = time.time()
 
         self.captured_start = False
@@ -63,6 +67,10 @@ class DemoSnapshotNode(Node):
             MarkerArray, '/defects', self._defects_cb, 10)
         self.tool_sub = self.create_subscription(
             Bool, '/cleaner_1/tool_cmd', self._tool_cb, 10)
+        self.coord_sub = self.create_subscription(
+            LaneCoordination, '/lane_coordination/events', self._coord_cb, 10)
+        self.mission_sub = self.create_subscription(
+            MissionStatus, '/hull_sim/mission_status', self._mission_cb, 10)
 
         # Snapshot check loop (2 Hz)
         self.timer = self.create_timer(0.5, self._check_and_snapshot)
@@ -92,6 +100,14 @@ class DemoSnapshotNode(Node):
     def _tool_cb(self, msg: Bool):
         self.tool_active = msg.data
 
+    def _coord_cb(self, msg: LaneCoordination):
+        self.released_lane = max(self.released_lane, msg.released_cleaner_lane)
+        if msg.emergency_active:
+            self.emergency_triggered = True
+
+    def _mission_cb(self, msg: MissionStatus):
+        self.all_clean = msg.all_clean
+
     def _defects_cb(self, msg: MarkerArray):
         for m in msg.markers:
             if m.ns in ('defect_geometry', 'defects_geometry'):
@@ -104,41 +120,44 @@ class DemoSnapshotNode(Node):
                     'type': m.type,
                     'color': color
                 }
-                # Check for critical red color indicating emergency
-                if m.color.r > 0.9 and m.color.g < 0.2 and m.color.b < 0.2:
-                    self.emergency_triggered = True
 
     def _check_and_snapshot(self):
+        """Captures each staged frame on the real mission event it is named for.
+
+        The elapsed-time values are fallbacks only: a full 3-lane sweep plus closed-loop
+        verification runs far longer than the old hard-coded 5/10/18/26s triggers, so
+        those fired before the stage they claimed to show had actually happened.
+        """
         elapsed = time.time() - self.start_time
         if not self.robot_poses:
             return
 
-        # Snapshot 1: Start (2.0s)
+        # Stage 1: Start — defects undetected, mapper beginning Lane 1.
         if elapsed >= 2.0 and not self.captured_start:
             self._render_frame(os.path.join(DOCS_DIR, 'screenshot_start.png'),
                                title="HullSentinal V2 [Start] — Multi-Robot Serpentine Sweep & Defect Discovery")
             self.captured_start = True
 
-        # Snapshot 2: Lane Coordination (5.0s)
-        if elapsed >= 5.0 and self.captured_start and not self.captured_coord:
+        # Stage 2: Lane 1 released by the coordinator; cleaner authorized.
+        if (self.released_lane >= 1 or elapsed >= 40.0) and self.captured_start and not self.captured_coord:
             self._render_frame(os.path.join(DOCS_DIR, 'screenshot_lane_coordination.png'),
-                               title="HullSentinal V2 [Coordination] — Cleaner Holds At Boundary While Mapper Advances")
+                               title="HullSentinal V2 [Coordination] — Lane 1 Released; Cleaner Authorized To Engage")
             self.captured_coord = True
 
-        # Snapshot 3: Mid-cleaning (active tool or 10.0s)
-        if (self.tool_active or elapsed >= 10.0) and self.captured_coord and not self.captured_mid:
+        # Stage 3: Cavitation tool physically engaged on a target defect.
+        if (self.tool_active or elapsed >= 55.0) and self.captured_coord and not self.captured_mid:
             self._render_frame(os.path.join(DOCS_DIR, 'screenshot_mid_cleaning.png'),
                                title="HullSentinal V2 [Mid-Cleaning] — Cleaner Navigates A* Waypoints with Active Cavitation Tool")
             self.captured_mid = True
 
-        # Snapshot 4: Emergency Interruption (escalated defect or 18.0s)
-        if (self.emergency_triggered or elapsed >= 18.0) and self.captured_mid and not self.captured_emerg:
+        # Stage 4: A defect crossed CRITICAL and preempted the active task.
+        if (self.emergency_triggered or elapsed >= 90.0) and self.captured_mid and not self.captured_emerg:
             self._render_frame(os.path.join(DOCS_DIR, 'screenshot_emergency_interruption.png'),
                                title="HullSentinal V2 [Emergency Interruption] — Escalated Crack Triggers Priority Context Stack Preemption")
             self.captured_emerg = True
 
-        # Snapshot 5: End / Verified (26.0s+)
-        if elapsed >= 26.0 and self.captured_emerg and not self.captured_end:
+        # Stage 5: Every defect verified clean by the closed-loop rescan.
+        if (self.all_clean or elapsed >= 150.0) and self.captured_emerg and not self.captured_end:
             self._render_frame(os.path.join(DOCS_DIR, 'screenshot_end.png'),
                                title="HullSentinal V2 [End] — Closed-Loop Rescan Verification Completed (VERIFIED_CLEAN)")
             self.captured_end = True
@@ -239,24 +258,28 @@ class DemoSnapshotNode(Node):
 
 
 def main(args=None):
+    rclpy.init(args=args)
+    node = None
+    exit_code = 0
     try:
-        rclpy.init(args=args)
         node = DemoSnapshotNode()
-        try:
-            rclpy.spin(node)
-        except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
-            pass
-        except Exception:
-            pass
-        finally:
-            try:
-                node.destroy_node()
-            except Exception:
-                pass
-            if rclpy.ok():
-                rclpy.shutdown()
-    except Exception:
+        rclpy.spin(node)
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
+    except Exception:
+        # Never swallow a fatal error: a silent exit makes a dead node look healthy.
+        if node is not None:
+            node.get_logger().fatal('[VISUALIZATION] Fatal error, shutting down:\n' + traceback.format_exc())
+        else:
+            traceback.print_exc()
+        exit_code = 1
+    finally:
+        if node is not None:
+            node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+    if exit_code:
+        raise SystemExit(exit_code)
 
 
 if __name__ == '__main__':

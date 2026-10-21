@@ -4,6 +4,7 @@
 # Usage:
 #   ./run_demo.sh             (Launches interactive full stack + RViz2 GUI)
 #   ./run_demo.sh --headless  (Launches headless with visual snapshot capture)
+#   ./run_demo.sh --headless --duration=60   (shorter headless run)
 # =============================================================================
 
 set -e
@@ -26,7 +27,10 @@ fi
 
 # 2. Parse arguments
 GUI_MODE="true"
-DURATION=0
+# Default covers a full 3-lane sweep plus closed-loop verification of all 14 defects.
+# Mission length varies with mapper/cleaner interaction (~110-150s), so leave headroom
+# for the final VERIFIED_CLEAN snapshot to be captured.
+DURATION=180
 
 for arg in "$@"; do
     case $arg in
@@ -75,7 +79,7 @@ if [[ "$GUI_MODE" == "false" ]]; then
     LAUNCH_PID=$!
 
     # Wait for snapshot generation or specified duration
-    WAIT_TIME=${DURATION:-10}
+    WAIT_TIME="${DURATION}"
     echo "[HullSentinal Demo] Running for ${WAIT_TIME} seconds..."
     sleep "${WAIT_TIME}"
 

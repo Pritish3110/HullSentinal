@@ -27,6 +27,9 @@ class GridPlanner:
         # 0: free, 1: occupied
         self.grid = np.zeros((self.ny, self.nx), dtype=np.uint8)
         self.proximity_cost = np.zeros((self.ny, self.nx), dtype=np.float32)
+        # Set when the last plan_path() call fell back to a straight line; callers
+        # own the logging since this class has no ROS node handle.
+        self.last_plan_failed = False
 
         self._build_grid()
 
@@ -116,6 +119,7 @@ class GridPlanner:
         """8-connected A* with octile heuristic and no corner cutting."""
         sx, sy = start
         gx, gy = goal
+        self.last_plan_failed = False
 
         start_r, start_c = self.find_nearest_free(*self.world_to_grid(sx, sy))
         goal_r, goal_c = self.find_nearest_free(*self.world_to_grid(gx, gy))
@@ -173,7 +177,8 @@ class GridPlanner:
                     came_from[(nr, nc)] = (cr, cc)
 
         if not found:
-            # Fallback direct path
+            # Fallback direct path: unsafe around obstacles, so flag it for the caller.
+            self.last_plan_failed = True
             return [(gx, gy)]
 
         # Reconstruct path
@@ -205,11 +210,15 @@ class GridPlanner:
 
         return smoothed
 
-    def get_path_length(self, start, goal):
-        """Computes true navigation path length along obstacle-free trajectory."""
-        waypoints = self.plan_path(start, goal)
+    @staticmethod
+    def path_length(waypoints):
+        """Sums the polyline length of an already-planned waypoint list."""
         total_len = 0.0
         for i in range(len(waypoints) - 1):
             total_len += math.hypot(waypoints[i+1][0] - waypoints[i][0],
                                     waypoints[i+1][1] - waypoints[i][1])
         return total_len
+
+    def get_path_length(self, start, goal):
+        """Computes true navigation path length along obstacle-free trajectory."""
+        return self.path_length(self.plan_path(start, goal))

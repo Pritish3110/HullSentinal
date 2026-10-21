@@ -15,6 +15,7 @@ import math
 import heapq
 import time
 import yaml
+import traceback
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
@@ -104,6 +105,11 @@ class UtilityScorer(Node):
 
     def _score_and_publish(self):
         if not self.active_tasks:
+            # Still publish, otherwise subscribers keep rendering the last
+            # non-empty queue forever once every defect is verified clean.
+            empty = TaskQueue()
+            empty.header.stamp = self.get_clock().now().to_msg()
+            self.queue_pub.publish(empty)
             return
 
         cx, cy = self.cleaner_pose
@@ -190,24 +196,28 @@ class UtilityScorer(Node):
 
 
 def main(args=None):
+    rclpy.init(args=args)
+    node = None
+    exit_code = 0
     try:
-        rclpy.init(args=args)
         node = UtilityScorer()
-        try:
-            rclpy.spin(node)
-        except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
-            pass
-        except Exception:
-            pass
-        finally:
-            try:
-                node.destroy_node()
-            except Exception:
-                pass
-            if rclpy.ok():
-                rclpy.shutdown()
-    except Exception:
+        rclpy.spin(node)
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
+    except Exception:
+        # Never swallow a fatal error: a silent exit makes a dead node look healthy.
+        if node is not None:
+            node.get_logger().fatal('[UTILITY] Fatal error, shutting down:\n' + traceback.format_exc())
+        else:
+            traceback.print_exc()
+        exit_code = 1
+    finally:
+        if node is not None:
+            node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+    if exit_code:
+        raise SystemExit(exit_code)
 
 
 if __name__ == '__main__':

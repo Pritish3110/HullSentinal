@@ -16,10 +16,11 @@ import time
 import json
 import yaml
 from collections import deque
+import traceback
 import rclpy
 from rclpy.node import Node
 from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import Point, PoseStamped
 from std_msgs.msg import Bool, String
 from ament_index_python.packages import get_package_share_directory
 
@@ -58,8 +59,17 @@ class MarkerPublisher(Node):
                 'state': 'UNDETECTED'
             }
 
-        # Robot states
-        self.robot_poses = {'mapper_1': (1.5, 2.0, 0.05), 'cleaner_1': (1.5, 7.0, 0.05)}
+        # Robot states (spawn poses mirror the master config so markers are correct pre-odometry)
+        robots_cfg = self.cfg.get('robots', {})
+        self.robot_poses = {
+            rid: (float(robots_cfg.get(rid, {}).get('start_x', dx)),
+                  float(robots_cfg.get(rid, {}).get('start_y', dy)),
+                  0.05)
+            for rid, dx, dy in (('mapper_1', 1.5, 2.0), ('cleaner_1', 1.5, 7.0))
+        }
+        self.fov_radius = float(robots_cfg.get('mapper_1', {}).get('sensor_fov_radius', 1.80))
+        self.halo_radius = 0.65
+        self._ring_angles = [i * 2.0 * math.pi / 48 for i in range(49)]
         self.robot_paths = {'mapper_1': deque(maxlen=600), 'cleaner_1': deque(maxlen=600)}
         self.robot_goals = {'cleaner_1': None}
         self.cleaner_tool_active = False
@@ -99,6 +109,7 @@ class MarkerPublisher(Node):
         self.mapper_path_pub = self.create_publisher(Marker, '/mapper_1/path_marker', 10)
         self.cleaner_path_pub = self.create_publisher(Marker, '/cleaner_1/path_marker', 10)
         self.cleaner_goal_pub = self.create_publisher(Marker, '/cleaner_1/goal_marker', 10)
+        self.robot_pub = self.create_publisher(MarkerArray, '/robot_markers', 10)
         self.composite_pub = self.create_publisher(MarkerArray, '/visualization_marker_array', 10)
 
         # Timer (10 Hz)
@@ -182,7 +193,7 @@ class MarkerPublisher(Node):
             data = json.loads(msg.data)
             self.out_of_bounds_count = data.get('out_of_bounds_count', 0)
             self.all_in_bounds = data.get('all_in_bounds', True)
-        except Exception:
+        except (ValueError, TypeError):
             pass
 
     def _publish_all(self):
@@ -199,6 +210,9 @@ class MarkerPublisher(Node):
             self.has_deleted_all = True
             return
 
+        # Composite mirror of every marker this node owns (/visualization_marker_array).
+        composite = MarkerArray()
+
         # 1. Sole-Owner Defect Markers Array with Stable IDs
         defects_array = MarkerArray()
 
@@ -213,7 +227,7 @@ class MarkerPublisher(Node):
             m = Marker()
             m.header.stamp = now
             m.header.frame_id = 'hull_world'
-            m.ns = 'defect_geometry'
+            m.ns = 'defects_geometry'
             m.id = idx
             m.action = Marker.ADD
             m.pose.position.x = x
@@ -268,7 +282,7 @@ class MarkerPublisher(Node):
             p_bar = Marker()
             p_bar.header.stamp = now
             p_bar.header.frame_id = 'hull_world'
-            p_bar.ns = 'defect_progress'
+            p_bar.ns = 'defects_progressbar'
             p_bar.id = 200 + idx
             if state == 'CLEANING':
                 p_bar.type = Marker.CUBE
@@ -289,7 +303,7 @@ class MarkerPublisher(Node):
             txt = Marker()
             txt.header.stamp = now
             txt.header.frame_id = 'hull_world'
-            txt.ns = 'defect_label'
+            txt.ns = 'defects_text'
             txt.id = 100 + idx
             txt.type = Marker.TEXT_VIEW_FACING
             txt.action = Marker.ADD
@@ -319,6 +333,7 @@ class MarkerPublisher(Node):
             defects_array.markers.append(txt)
 
         self.defects_pub.publish(defects_array)
+        composite.markers.extend(defects_array.markers)
 
         # 2. Publish 24m x 8m Belief Heatmap
         heatmap_array = MarkerArray()
@@ -356,6 +371,7 @@ class MarkerPublisher(Node):
                 heatmap_array.markers.append(hm)
 
         self.heatmap_pub.publish(heatmap_array)
+        composite.markers.extend(heatmap_array.markers)
 
         # 3. Publish HUD Text Marker (/task_queue_marker)
         hud = Marker()
@@ -402,8 +418,9 @@ class MarkerPublisher(Node):
 
         hud.text = "\n".join(hud_lines)
         self.queue_marker_pub.publish(hud)
+        composite.markers.append(hud)
 
-        # 4. Mapper Sensor FOV Footprint
+        # 4. Mapper Sensor FOV Footprint (filled disc + sharp perimeter ring)
         mx, my, _ = self.robot_poses['mapper_1']
         fov = Marker()
         fov.header.stamp = now
@@ -414,13 +431,31 @@ class MarkerPublisher(Node):
         fov.action = Marker.ADD
         fov.pose.position.x = mx
         fov.pose.position.y = my
-        fov.pose.position.z = 0.08
+        fov.pose.position.z = 0.035
         fov.pose.orientation.w = 1.0
-        fov.scale.x = 3.60  # Diameter = 2 * 1.80m FOV
-        fov.scale.y = 3.60
-        fov.scale.z = 0.02
-        fov.color.r, fov.color.g, fov.color.b, fov.color.a = 0.05, 0.85, 0.95, 0.22
+        fov.scale.x = self.fov_radius * 2.0
+        fov.scale.y = self.fov_radius * 2.0
+        fov.scale.z = 0.015
+        fov.color.r, fov.color.g, fov.color.b, fov.color.a = 0.0, 0.95, 1.0, 0.35
         self.fov_pub.publish(fov)
+        composite.markers.append(fov)
+
+        ring = Marker()
+        ring.header.stamp = now
+        ring.header.frame_id = 'hull_world'
+        ring.ns = 'sensor_fov'
+        ring.id = 8889
+        ring.type = Marker.LINE_STRIP
+        ring.action = Marker.ADD
+        ring.pose.orientation.w = 1.0
+        ring.scale.x = 0.04
+        ring.color.r, ring.color.g, ring.color.b, ring.color.a = 0.0, 1.0, 1.0, 0.95
+        ring.points = [
+            Point(x=mx + self.fov_radius * math.cos(a), y=my + self.fov_radius * math.sin(a), z=0.045)
+            for a in self._ring_angles
+        ]
+        self.fov_pub.publish(ring)
+        composite.markers.append(ring)
 
         # 5. Trajectory Trails
         for rid, pub, cr, cg, cb in [
@@ -441,6 +476,7 @@ class MarkerPublisher(Node):
                 trail.color.r, trail.color.g, trail.color.b, trail.color.a = cr, cg, cb, 0.70
                 trail.points = [Point(x=p[0], y=p[1], z=p[2]) for p in path]
                 pub.publish(trail)
+                composite.markers.append(trail)
 
         # 6. Cleaner Target Goal Arrow
         c_goal = self.robot_goals['cleaner_1']
@@ -462,27 +498,95 @@ class MarkerPublisher(Node):
                 Point(x=c_goal[0], y=c_goal[1], z=0.15)
             ]
             self.cleaner_goal_pub.publish(arrow)
+            composite.markers.append(arrow)
+
+        # 7. Robot Identity Markers: a 0.65m URDF body is ~3% of a 24x8m plate,
+        #    so each robot carries a ground halo and a floating callout label.
+        robot_array = MarkerArray()
+        for idx, (rid, cr, cg, cb, label) in enumerate([
+            ('mapper_1', 0.0, 0.9, 1.0, 'MAPPER ROV'),
+            ('cleaner_1', 1.0, 0.45, 0.0, 'CLEANER CRAWLER')
+        ]):
+            rx, ry, _ = self.robot_poses[rid]
+
+            halo = Marker()
+            halo.header.stamp = now
+            halo.header.frame_id = 'hull_world'
+            halo.ns = 'robot_halo'
+            halo.id = idx
+            halo.type = Marker.LINE_STRIP
+            halo.action = Marker.ADD
+            halo.pose.orientation.w = 1.0
+            halo.scale.x = 0.06
+            halo.color.r, halo.color.g, halo.color.b, halo.color.a = cr, cg, cb, 0.90
+            halo.points = [
+                Point(x=rx + self.halo_radius * math.cos(a), y=ry + self.halo_radius * math.sin(a), z=0.02)
+                for a in self._ring_angles
+            ]
+            robot_array.markers.append(halo)
+
+            tag = Marker()
+            tag.header.stamp = now
+            tag.header.frame_id = 'hull_world'
+            tag.ns = 'robot_label'
+            tag.id = idx
+            tag.type = Marker.TEXT_VIEW_FACING
+            tag.action = Marker.ADD
+            tag.pose.position.x = rx
+            tag.pose.position.y = ry
+            tag.pose.position.z = 0.95
+            tag.pose.orientation.w = 1.0
+            tag.scale.z = 0.34
+            tag.color.r, tag.color.g, tag.color.b, tag.color.a = cr, cg, cb, 1.0
+            if rid == 'cleaner_1' and self.cleaner_tool_active:
+                tag.text = f'{label} [TOOL ACTIVE]'
+            else:
+                tag.text = label
+            robot_array.markers.append(tag)
+
+            stem = Marker()
+            stem.header.stamp = now
+            stem.header.frame_id = 'hull_world'
+            stem.ns = 'robot_stem'
+            stem.id = idx
+            stem.type = Marker.LINE_LIST
+            stem.action = Marker.ADD
+            stem.pose.orientation.w = 1.0
+            stem.scale.x = 0.025
+            stem.color.r, stem.color.g, stem.color.b, stem.color.a = cr, cg, cb, 0.55
+            stem.points = [Point(x=rx, y=ry, z=0.02), Point(x=rx, y=ry, z=0.80)]
+            robot_array.markers.append(stem)
+
+        self.robot_pub.publish(robot_array)
+        composite.markers.extend(robot_array.markers)
+
+        # 8. Composite mirror for generic single-display RViz setups
+        self.composite_pub.publish(composite)
 
 
 def main(args=None):
+    rclpy.init(args=args)
+    node = None
+    exit_code = 0
     try:
-        rclpy.init(args=args)
         node = MarkerPublisher()
-        try:
-            rclpy.spin(node)
-        except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
-            pass
-        except Exception:
-            pass
-        finally:
-            try:
-                node.destroy_node()
-            except Exception:
-                pass
-            if rclpy.ok():
-                rclpy.shutdown()
-    except Exception:
+        rclpy.spin(node)
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
+    except Exception:
+        # Never swallow a fatal error: a silent exit makes a dead node look healthy.
+        if node is not None:
+            node.get_logger().fatal('[VISUALIZATION] Fatal error, shutting down:\n' + traceback.format_exc())
+        else:
+            traceback.print_exc()
+        exit_code = 1
+    finally:
+        if node is not None:
+            node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+    if exit_code:
+        raise SystemExit(exit_code)
 
 
 if __name__ == '__main__':

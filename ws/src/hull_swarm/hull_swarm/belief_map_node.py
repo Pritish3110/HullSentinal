@@ -9,6 +9,7 @@ Handles defect lifecycle and temporal degradation tracking.
 import os
 import time
 import yaml
+import traceback
 import rclpy
 from rclpy.node import Node
 from sqlalchemy import create_engine, Column, String, Float, Integer, Boolean
@@ -273,6 +274,14 @@ class BeliefMapNode(Node):
         try:
             rec = session.query(DefectBeliefModel).filter_by(defect_id=msg.defect_id).first()
             if rec:
+                # This node also publishes on /belief_updates and receives its own
+                # messages back. Such echoes carry the state already stored, so skip
+                # them instead of re-committing and double-logging every transition.
+                if (rec.status == msg.status
+                        and abs(rec.severity - msg.severity) < 1e-6
+                        and abs(rec.confidence - msg.confidence) < 1e-6
+                        and rec.rescan_count == int(msg.rescan_count)):
+                    return
                 rec.status = msg.status
                 rec.severity = float(msg.severity)
                 rec.confidence = float(msg.confidence)
@@ -392,24 +401,28 @@ class BeliefMapNode(Node):
 
 
 def main(args=None):
+    rclpy.init(args=args)
+    node = None
+    exit_code = 0
     try:
-        rclpy.init(args=args)
         node = BeliefMapNode()
-        try:
-            rclpy.spin(node)
-        except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
-            pass
-        except Exception:
-            pass
-        finally:
-            try:
-                node.destroy_node()
-            except Exception:
-                pass
-            if rclpy.ok():
-                rclpy.shutdown()
-    except Exception:
+        rclpy.spin(node)
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
+    except Exception:
+        # Never swallow a fatal error: a silent exit makes a dead node look healthy.
+        if node is not None:
+            node.get_logger().fatal('[BELIEF] Fatal error, shutting down:\n' + traceback.format_exc())
+        else:
+            traceback.print_exc()
+        exit_code = 1
+    finally:
+        if node is not None:
+            node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+    if exit_code:
+        raise SystemExit(exit_code)
 
 
 if __name__ == '__main__':
