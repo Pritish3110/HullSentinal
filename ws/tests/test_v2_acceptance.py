@@ -10,16 +10,20 @@ Validates all 8 architectural gates for the Cognitive Multi-Robot Upgrade:
 - Gate 6: Cleaner State Machine & Priority Context Stack Preemption
 - Gate 7: Single-Owner MarkerPublisher with Stable ID Indexing & ASCII Text
 - Gate 8: Dynamic Safety Barrier & Geofence Perimeter Containment
+- Gate 9: Marker Namespaces Consistent With The Saved RViz Layout
+- Gate 10: Verification Handshake Retry & Timeout (no permanent VERIFYING stall)
+- Gate 11: Emergency Preemption Is Idempotent Per Defect (bounded context stack)
 """
 
 import os
 import math
+import time
 import yaml
 import pytest
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped, Twist
-from visualization_msgs.msg import MarkerArray
+from visualization_msgs.msg import Marker, MarkerArray
 
 from hull_control.grid_planner import GridPlanner
 from hull_control.mapper_controller import MapperController
@@ -31,7 +35,7 @@ from hull_swarm.belief_map_node import BeliefMapNode
 from hull_swarm.utility_scorer import UtilityScorer
 from hull_sim.sim_engine_node import SimEngineNode
 from hull_bringup.marker_publisher import MarkerPublisher
-from hull_msgs.msg import TaskItem, MapperStatus, BeliefUpdate, DefectDetection
+from hull_msgs.msg import TaskItem, TaskQueue, MapperStatus, BeliefUpdate, DefectDetection
 
 
 @pytest.fixture(scope="module")
@@ -195,6 +199,22 @@ def test_gate7_single_owner_marker_indexing(rclpy_init):
     pub = MarkerPublisher()
     assert len(pub.defects) == 14
 
+    # Populate the state that only exists once odometry and goals are flowing, so the
+    # trail / goal-arrow / robot-marker branches are actually executed. Without this the
+    # gate never reaches them and a NameError in those branches passes unnoticed.
+    for rid, sx, sy in (('mapper_1', 1.5, 2.0), ('cleaner_1', 1.5, 7.0)):
+        for step in range(5):
+            msg = PoseStamped()
+            msg.pose.position.x = sx + 0.5 * step
+            msg.pose.position.y = sy
+            pub._pose_cb(rid, msg)
+    goal = PoseStamped()
+    goal.pose.position.x = 9.5
+    goal.pose.position.y = 1.8
+    pub._goal_cb(goal)
+    assert len(pub.robot_paths['mapper_1']) >= 2
+    assert pub.robot_goals['cleaner_1'] is not None
+
     # Run publisher cycle
     pub._publish_all()  # delete all
     pub._publish_all()  # actual publish
@@ -212,6 +232,153 @@ def test_gate7_single_owner_marker_indexing(rclpy_init):
     assert len(geom_ids.intersection(label_ids)) == 0, "Geometry and Label IDs must not collide"
 
     pub.destroy_node()
+
+
+def test_gate9_marker_namespaces_match_rviz_config(rclpy_init):
+    """Gate 9: Every namespace the publisher emits must exist in the saved RViz layout."""
+    rviz_path = os.path.abspath(os.path.join(
+        os.path.dirname(__file__), '../src/hull_bringup/config/rviz_config.rviz'))
+    assert os.path.exists(rviz_path), f"RViz layout missing at {rviz_path}"
+    with open(rviz_path, 'r') as f:
+        rviz_cfg = yaml.safe_load(f)
+
+    configured = {}
+    for display in rviz_cfg['Visualization Manager']['Displays']:
+        topic = display.get('Marker Topic', {}).get('Value')
+        if topic:
+            configured[topic] = set(display.get('Namespaces', {}))
+
+    pub = MarkerPublisher()
+    captured = {'/defects': set(), '/robot_markers': set()}
+
+    def capture(topic):
+        return lambda arr: captured[topic].update(
+            m.ns for m in arr.markers if m.action == Marker.ADD)
+
+    pub.defects_pub.publish = capture('/defects')
+    pub.robot_pub.publish = capture('/robot_markers')
+    pub.heatmap_pub.publish = lambda arr: None
+    pub.composite_pub.publish = lambda arr: None
+    pub.queue_marker_pub.publish = lambda m: None
+    pub.fov_pub.publish = lambda m: None
+    pub.mapper_path_pub.publish = lambda m: None
+    pub.cleaner_path_pub.publish = lambda m: None
+    pub.cleaner_goal_pub.publish = lambda m: None
+
+    pub._publish_all()  # delete all
+    pub._publish_all()  # actual publish
+    pub.destroy_node()
+
+    assert captured['/defects'] == {'defects_geometry', 'defects_text'}
+    assert captured['/robot_markers'] == {'robot_halo', 'robot_label', 'robot_stem'}
+
+    for topic, emitted in captured.items():
+        missing = emitted - configured.get(topic, set())
+        assert not missing, (
+            f"{topic} emits namespace(s) {sorted(missing)} that rviz_config.rviz does not list; "
+            "RViz would restore them with no saved visibility state")
+
+
+def test_gate10_verification_state_machine_never_stalls(rclpy_init):
+    """Gate 10: VERIFYING retries while /task_complete is down, then releases the cleaner."""
+    cleaner = ToolController()
+    cleaner.current_pose = (9.5, 1.8)
+
+    task = TaskItem()
+    task.defect_id = 'defect_rust_01'
+    task.position.x = 9.5
+    task.position.y = 1.8
+    task.lane_id = 1
+    task.eligible = True
+
+    cleaner.current_task = task
+    cleaner.state = CleanerState.VERIFYING
+    cleaner.waiting_for_service = False
+    cleaner.verify_deadline = time.time() + cleaner.verify_timeout
+
+    # /task_complete is never advertised in this unit context, so the call cannot be sent.
+    for _ in range(5):
+        cleaner._state_machine_loop()
+    assert cleaner.state == CleanerState.VERIFYING, "Must keep retrying before the deadline"
+    assert not cleaner.waiting_for_service
+
+    # Past the deadline the cleaner must bail out instead of stalling the whole mission.
+    cleaner.verify_deadline = time.time() - 1.0
+    cleaner._state_machine_loop()
+    assert cleaner.state == CleanerState.IDLE
+    assert cleaner.current_task is None
+    assert cleaner.current_path == []
+
+    cleaner.destroy_node()
+
+
+class _FailedFuture:
+    """Stands in for a /task_complete future when no service is advertised."""
+
+    def result(self):
+        raise RuntimeError('service unavailable in unit context')
+
+
+def test_gate11_emergency_preempts_each_defect_once(rclpy_init):
+    """Gate 11: A CRITICAL defect preempts once; a still-critical queue must not re-preempt."""
+    cleaner = ToolController()
+    cleaner.current_pose = (1.5, 7.0)
+
+    task1 = TaskItem()
+    task1.defect_id = 'defect_rust_01'
+    task1.position.x = 9.5
+    task1.position.y = 1.8
+    task1.lane_id = 1
+    task1.status = 'QUEUED'
+    task1.eligible = True
+
+    emerg = TaskItem()
+    emerg.defect_id = 'defect_crack_02'
+    emerg.position.x = 8.5
+    emerg.position.y = 3.8
+    emerg.lane_id = 2
+    emerg.severity = 0.88
+    emerg.status = 'QUEUED'
+    emerg.emergency_flag = True
+    emerg.risk_level = 'CRITICAL'
+    emerg.eligible = True
+
+    queue = TaskQueue()
+    queue.tasks = [emerg, task1]
+
+    cleaner._dispatch_task(task1)
+    assert cleaner.state == CleanerState.NAVIGATING
+
+    # First sighting preempts and banks the interrupted task.
+    cleaner._queue_cb(queue)
+    assert len(cleaner.context_stack) == 1
+    assert cleaner.current_task.defect_id == 'defect_crack_02'
+    assert cleaner.state == CleanerState.EMERGENCY_NAVIGATING
+
+    # Remediation finishes and the suspended task resumes.
+    cleaner._complete_done_cb(_FailedFuture(), 'defect_crack_02')
+    assert cleaner.context_stack == []
+    assert cleaner.current_task.defect_id == 'defect_rust_01'
+
+    # The scorer keeps republishing the same CRITICAL task at 2 Hz until the belief map
+    # catches up. Re-preempting here would re-bank defect_rust_01 on every tick and the
+    # cleaner would ping-pong between the two defects forever.
+    for _ in range(10):
+        cleaner._queue_cb(queue)
+
+    assert cleaner.context_stack == [], (
+        f"Emergency re-preempted after remediation; stack depth {len(cleaner.context_stack)}")
+    assert cleaner.current_task.defect_id == 'defect_rust_01'
+    assert cleaner.state == CleanerState.NAVIGATING
+
+    # A handshake in flight must never be preempted out from under itself.
+    cleaner.state = CleanerState.VERIFYING
+    cleaner.preempted_defects.clear()
+    cleaner._queue_cb(queue)
+    assert cleaner.context_stack == []
+    assert cleaner.state == CleanerState.VERIFYING
+
+    cleaner.destroy_node()
 
 
 def test_gate8_geofence_and_boundary_containment(rclpy_init):
