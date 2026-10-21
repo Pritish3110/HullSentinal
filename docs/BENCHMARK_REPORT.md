@@ -1,7 +1,7 @@
 # HullSentinal V2 — Comprehensive Benchmark & Evaluation Report
 
 **Evaluation Suite:** 6 Test Scenarios × 5 Random Seeds (60 Total Independent Missions)
-**Date Generated:** 2026-09-24 15:40:17
+**Date Generated:** 2026-10-22 00:37:23
 **World Scale:** 24.0m × 8.0m Manifold with 3 Horizontal Lanes & 6 Static Obstacles
 
 ---
@@ -20,18 +20,18 @@
 
 | Scenario | System Architecture | Time (s) | Order Correctness | OOB Violations | Lane Violations | Detected / Cleaned | Risk Corr ($r_s$) | Catch Rate | Collisions |
 |---|---|---|---|---|---|---|---|---|---|
-| `nominal` | **HullSentinal V2 (Ours)** | 101.2 ± 4.6 | **83.2%** | **0** | **0** | 14 / 14 | **+0.68** | 0.00 | 0 |
-| `nominal` | **Naive FIFO Baseline** | 76.1 ± 0.2 | **50.0%** | **0** | **0** | 14 / 14 | **-0.05** | 0.00 | 0 |
-| `swarm_scaling` | **HullSentinal V2 (Ours)** | 55.5 ± 2.3 | **60.0%** | **0** | **0** | 14 / 14 | **+0.17** | 0.00 | 0 |
-| `swarm_scaling` | **Naive FIFO Baseline** | 54.4 ± 0.3 | **54.0%** | **0** | **0** | 14 / 14 | **+0.06** | 0.00 | 0 |
-| `obstacles` | **HullSentinal V2 (Ours)** | 127.9 ± 6.4 | **84.3%** | **0** | **0** | 14 / 14 | **+0.72** | 0.00 | 0 |
-| `obstacles` | **Naive FIFO Baseline** | 96.4 ± 0.2 | **50.0%** | **0** | **0** | 14 / 14 | **-0.05** | 0.00 | 0 |
-| `high_sensor_noise` | **HullSentinal V2 (Ours)** | 101.2 ± 4.6 | **83.2%** | **0** | **0** | 14 / 14 | **+0.68** | 0.00 | 0 |
-| `high_sensor_noise` | **Naive FIFO Baseline** | 76.1 ± 0.2 | **50.0%** | **0** | **0** | 14 / 14 | **-0.05** | 0.00 | 0 |
-| `agent_failure` | **HullSentinal V2 (Ours)** | 111.5 ± 6.4 | **88.8%** | **0** | **0** | 14 / 14 | **+0.80** | 0.36 | 0 |
-| `agent_failure` | **Naive FIFO Baseline** | 76.1 ± 0.2 | **50.0%** | **0** | **0** | 14 / 14 | **-0.05** | 0.00 | 0 |
-| `marine_current` | **HullSentinal V2 (Ours)** | 104.3 ± 4.7 | **83.2%** | **0** | **0** | 14 / 14 | **+0.68** | 0.00 | 0 |
-| `marine_current` | **Naive FIFO Baseline** | 79.2 ± 0.2 | **50.0%** | **0** | **0** | 14 / 14 | **-0.05** | 0.00 | 0 |
+| `nominal` | **HullSentinal V2 (Ours)** | 108.0 ± 1.1 | **85.3%** | **0** | **0** | 14 / 14 | **+0.77** | 0.00 | 0 |
+| `nominal` | **Naive FIFO Baseline** | 76.1 ± 0.2 | **49.7%** | **0** | **0** | 14 / 14 | **-0.07** | 0.00 | 0 |
+| `swarm_scaling` | **HullSentinal V2 (Ours)** | 58.5 ± 0.6 | **60.6%** | **0** | **0** | 14 / 14 | **+0.23** | 0.00 | 0 |
+| `swarm_scaling` | **Naive FIFO Baseline** | 54.4 ± 0.3 | **53.9%** | **0** | **0** | 14 / 14 | **+0.05** | 0.00 | 0 |
+| `obstacles` | **HullSentinal V2 (Ours)** | 137.1 ± 1.3 | **89.0%** | **0** | **0** | 14 / 14 | **+0.83** | 0.00 | 0 |
+| `obstacles` | **Naive FIFO Baseline** | 96.4 ± 0.2 | **49.7%** | **0** | **0** | 14 / 14 | **-0.07** | 0.00 | 0 |
+| `high_sensor_noise` | **HullSentinal V2 (Ours)** | 108.0 ± 1.1 | **85.3%** | **0** | **0** | 14 / 14 | **+0.77** | 0.00 | 0 |
+| `high_sensor_noise` | **Naive FIFO Baseline** | 76.1 ± 0.2 | **49.7%** | **0** | **0** | 14 / 14 | **-0.07** | 0.00 | 0 |
+| `agent_failure` | **HullSentinal V2 (Ours)** | 116.8 ± 3.7 | **87.6%** | **0** | **0** | 14 / 14 | **+0.81** | 0.36 | 0 |
+| `agent_failure` | **Naive FIFO Baseline** | 76.1 ± 0.2 | **49.7%** | **0** | **0** | 14 / 14 | **-0.07** | 0.00 | 0 |
+| `marine_current` | **HullSentinal V2 (Ours)** | 111.5 ± 1.1 | **85.3%** | **0** | **0** | 14 / 14 | **+0.77** | 0.00 | 0 |
+| `marine_current` | **Naive FIFO Baseline** | 79.2 ± 0.2 | **49.7%** | **0** | **0** | 14 / 14 | **-0.07** | 0.00 | 0 |
 
 ---
 
