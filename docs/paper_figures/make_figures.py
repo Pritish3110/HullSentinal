@@ -79,102 +79,99 @@ def agg(rows, scen, system, key, scale=1.0):
 
 # ---------------------------------------------------------------- Fig. 1
 def fig_architecture():
-    """Dataflow of the two-robot stack. Feedback paths are routed as explicit
-    polylines through empty corridors so no arrow crosses a block."""
-    fig, ax = plt.subplots(figsize=(DCOL, 2.95))
-    ax.set_xlim(0, 100); ax.set_ylim(0, 46); ax.axis('off')
+    """Dataflow of the two-robot stack.
 
-    TOP_Y, TOP_H = 28.0, 12.0
-    BOT_Y, BOT_H = 11.5, 11.0
+    Boxes are laid out on a 4 x 2 lattice with 10-unit horizontal gaps so the topic
+    labels fit between blocks without masking a border, and every feedback path is an
+    explicit polyline routed through an empty corridor.
+    """
+    fig, ax = plt.subplots(figsize=(DCOL, 2.85))
+    ax.set_xlim(0, 106); ax.set_ylim(5.0, 56); ax.axis('off')
 
-    def box(x, y, w, h, title, lines, fc=PANEL, ec=EDGE, lw=0.9):
-        ax.add_patch(FancyBboxPatch((x, y), w, h,
-                     boxstyle='round,pad=0.3,rounding_size=1.0',
-                     fc=fc, ec=ec, lw=lw, zorder=3))
-        ax.text(x + w / 2, y + h - 2.6, title, ha='center', va='center',
-                fontsize=7.4, fontweight='bold', color=NAVY, zorder=4)
+    BW, BH = 17.0, 14.0
+    TOP_Y, BOT_Y = 32.0, 11.0
+    XS = [1.0, 28.0, 55.0, 82.0]
+    FEED = '#9E2A2B'
+
+    def box(x, y, title, lines, fc=PANEL, ec=EDGE):
+        ax.add_patch(FancyBboxPatch((x, y), BW, BH,
+                     boxstyle='round,pad=0.25,rounding_size=1.0',
+                     fc=fc, ec=ec, lw=0.9, zorder=3))
+        ax.text(x + BW / 2, y + BH - 3.0, title, ha='center', va='center',
+                fontsize=7.3, fontweight='bold', color=NAVY, zorder=4)
         for i, ln in enumerate(lines):
-            ax.text(x + w / 2, y + h - 5.8 - i * 2.8, ln, ha='center', va='center',
-                    fontsize=6.2, color=MUTED, zorder=4)
-        return (x, y, w, h)
+            ax.text(x + BW / 2, y + BH - 6.6 - i * 3.0, ln, ha='center', va='center',
+                    fontsize=6.1, color=MUTED, zorder=4)
 
-    def straight(p, q, label='', color=DEEP, lpos='above', fs=5.8, rad=0.0):
-        ax.add_patch(FancyArrowPatch(p, q, connectionstyle=f'arc3,rad={rad}',
-                     arrowstyle='-|>', mutation_scale=7.0, lw=0.85,
-                     color=color, zorder=5))
-        if not label:
-            return
-        mx, my = (p[0] + q[0]) / 2, (p[1] + q[1]) / 2
-        off = {'above': (0, 1.3, 'center', 'bottom'),
-               'below': (0, -1.3, 'center', 'top'),
-               'left':  (-1.0, 0, 'right', 'center'),
-               'right': (1.0, 0, 'left', 'center')}[lpos]
-        ax.text(mx + off[0], my + off[1], label, ha=off[2], va=off[3],
-                fontsize=fs, color=color, style='italic', zorder=6,
-                bbox=dict(fc='white', ec='none', pad=0.8))
+    def harrow(x0, x1, y, label, fs=5.4):
+        ax.add_patch(FancyArrowPatch((x0, y), (x1, y), arrowstyle='-|>',
+                     mutation_scale=7.0, lw=0.85, color=DEEP, zorder=5))
+        ax.text((x0 + x1) / 2, y + 1.6, label, ha='center', va='bottom',
+                fontsize=fs, color=DEEP, style='italic', zorder=6,
+                bbox=dict(fc='white', ec='none', pad=0.6))
 
-    def polyline(pts, label='', lxy=None, color=CRIMSON, fs=5.8):
-        xs = [p[0] for p in pts]; ys = [p[1] for p in pts]
+    def varrow(x, y0, y1, label, lx, ly, color=DEEP, fs=5.4, ha='left'):
+        ax.add_patch(FancyArrowPatch((x, y0), (x, y1), arrowstyle='-|>',
+                     mutation_scale=7.0, lw=0.85, color=color, zorder=5))
+        ax.text(lx, ly, label, ha=ha, va='center', fontsize=fs, color=color,
+                style='italic', zorder=6, bbox=dict(fc='white', ec='none', pad=0.6))
+
+    def route(pts, label, lxy, color=FEED, fs=5.4):
+        xs = [q[0] for q in pts]; ys = [q[1] for q in pts]
         ax.plot(xs, ys, color=color, lw=0.85, zorder=5,
-                solid_joinstyle='round', solid_capstyle='round')
+                solid_joinstyle='round', solid_capstyle='butt')
         ax.add_patch(FancyArrowPatch(pts[-2], pts[-1], arrowstyle='-|>',
                      mutation_scale=7.0, lw=0.85, color=color, zorder=5))
-        if label and lxy:
-            ax.text(lxy[0], lxy[1], label, ha='center', va='center',
-                    fontsize=fs, color=color, style='italic', zorder=6,
-                    bbox=dict(fc='white', ec='none', pad=0.9))
+        ax.text(lxy[0], lxy[1], label, ha='center', va='center', fontsize=fs,
+                color=color, style='italic', zorder=6,
+                bbox=dict(fc='white', ec='none', pad=0.6))
 
-    # Cognition-layer container drawn first so blocks sit on top of it.
-    ax.add_patch(FancyBboxPatch((21.5, 9.6), 41.5, 33.7,
-                 boxstyle='round,pad=0.4,rounding_size=1.2',
-                 fc='#FBFDFE', ec=DEEP, lw=1.2, ls=(0, (4, 3)), zorder=1))
-    ax.text(42.2, 41.8, 'COGNITION LAYER  (contribution of this work)',
-            ha='center', va='center', fontsize=6.9, fontweight='bold',
+    # Cognition-layer enclosure, drawn under the blocks.
+    ax.add_patch(FancyBboxPatch((25.5, 8.0), 49.0, 41.5,
+                 boxstyle='round,pad=0.3,rounding_size=1.1',
+                 fc='#FBFDFE', ec=DEEP, lw=1.1, ls=(0, (4, 3)), zorder=1))
+    ax.text(50.0, 47.6, 'COGNITION LAYER  (contribution of this work)',
+            ha='center', va='center', fontsize=6.8, fontweight='bold',
             color=DEEP, zorder=2)
 
-    box(1, TOP_Y, 18.5, TOP_H, 'Simulation Engine',
+    box(XS[0], TOP_Y, 'Simulation Engine',
         ['Kinematics, 14 defects', 'Sensor FOV raycast',
          r'Growth $\gamma_\tau$, cavitation'], fc='#E9F1F6')
-    box(23.5, TOP_Y, 17.5, TOP_H, 'Belief Map',
+    box(XS[1], TOP_Y, 'Belief Map',
         [r'$\langle S, C, \tau, \ell \rangle$ per defect', 'SQLite lifecycle',
          'Recursive fusion'])
-    box(44.5, TOP_Y, 17.5, TOP_H, 'Utility Scorer',
+    box(XS[2], TOP_Y, 'Utility Scorer',
         [r'Ranks by $U(d)$', r'A* geodesic $g_{A^*}$', 'Risk weighting'])
-    box(66.5, TOP_Y, 18.5, TOP_H, 'Task Executive',
+    box(XS[3], TOP_Y, 'Task Executive',
         ['Cleaner state machine', 'Priority context stack', 'Preempt and resume'],
         fc='#E9F1F6')
 
-    box(23.5, BOT_Y, 17.5, BOT_H, 'Verification Monitor',
-        ['Rescan handshake', r'residual $>\theta_v$: requeue'])
-    box(44.5, BOT_Y, 17.5, BOT_H, 'Lane Coordinator',
+    box(XS[1], BOT_Y, 'Verification Monitor',
+        ['Rescan handshake', r'residual $>\theta_v$:', 'escalate and requeue'])
+    box(XS[2], BOT_Y, 'Lane Coordinator',
         [r'Gate: $\ell < \ell_{\mathrm{map}}$', 'Emergency override'])
-    box(66.5, BOT_Y, 18.5, BOT_H, 'Robot Controllers',
+    box(XS[3], BOT_Y, 'Robot Controllers',
         ['Serpentine mapper', 'A* crawler pursuit', 'Barrier and geofence'],
         fc='#E9F1F6')
 
-    # Forward chain along the top row.
-    straight((19.7, 34.0), (23.3, 34.0), '/defect_detections', lpos='above')
-    straight((41.2, 34.0), (44.3, 34.0), r'$\langle S,C\rangle$', lpos='above')
-    straight((62.2, 34.0), (66.3, 34.0), '/task_queue', lpos='above')
+    MID_Y = TOP_Y + BH / 2          # 39.0
+    harrow(18.5, 27.5, MID_Y, '/defect_detections')
+    harrow(45.5, 54.5, MID_Y, r'$\langle S, C \rangle$', fs=6.0)
+    harrow(72.5, 81.5, MID_Y, '/task_queue')
 
-    # Vertical couplings between aligned blocks.
-    straight((56.5, 22.7), (56.5, 27.8), '', lpos='right', fs=5.6)
-    ax.text(57.4, 23.5, 'eligibility', ha='left', va='center', fontsize=5.6,
-            color=DEEP, style='italic', zorder=6)
-    straight((75.75, 27.8), (75.75, 22.7), '/target_goal', lpos='right', fs=5.6)
-    straight((32.25, 22.7), (32.25, 27.8), '/belief_updates', lpos='left', fs=5.6)
+    varrow(32.0, 25.3, 31.7, '/belief_updates', 33.2, 27.3)
+    varrow(63.5, 25.3, 31.7, 'eligibility', 64.7, 27.0)
+    varrow(90.0, 31.7, 25.3, '/target_goal', 91.2, 28.5)
 
-    # Executive -> Verification, routed through the empty corridor between rows.
-    polyline([(70.0, 27.8), (70.0, 25.4), (37.0, 25.4), (37.0, 22.9)],
-             '/task_complete', (48.5, 26.6))
-
-    # Verification -> Simulation rescan, routed below the whole figure.
-    polyline([(23.3, 17.0), (10.25, 17.0), (10.25, 27.6)],
-             '/rescan_request', (16.2, 18.4))
-
-    # Controllers -> Simulation actuation, routed above the top row.
-    polyline([(85.3, 17.0), (92.5, 17.0), (92.5, 44.2), (10.25, 44.2),
-              (10.25, 40.2)], '/cmd_vel, /pose', (50.0, 45.0), color=MID)
+    # Executive -> Verification, through the inter-row corridor.
+    route([(86.0, 31.7), (86.0, 29.3), (41.0, 29.3), (41.0, 25.3)],
+          '/task_complete', (50.0, 30.4))
+    # Verification -> Simulation, around the left of the cognition layer.
+    route([(27.7, 18.0), (7.0, 18.0), (7.0, 31.7)],
+          '/rescan_request', (16.5, 19.3))
+    # Controllers -> Simulation actuation, over the top of the figure.
+    route([(99.2, 18.0), (103.0, 18.0), (103.0, 53.0), (12.0, 53.0), (12.0, 46.3)],
+          '/cmd_vel, /pose', (56.0, 54.1), color=MID)
 
     fig.savefig(os.path.join(OUT, 'fig1_architecture.png'))
     plt.close(fig)
@@ -182,52 +179,56 @@ def fig_architecture():
 
 # ---------------------------------------------------------------- Fig. 2
 def fig_lifecycle():
-    """Per-defect belief lifecycle: forward chain, requeue loop, preempt fast path."""
-    fig, ax = plt.subplots(figsize=(DCOL, 1.62))
-    ax.set_xlim(0, 100); ax.set_ylim(0, 48); ax.axis('off')
+    """Per-defect belief lifecycle, drawn in greyscale for print fidelity.
 
-    W, H, Y = 17.0, 10.0, 22.0
-    xs = [1.0, 21.5, 42.0, 62.5, 83.0]
+    Forward transitions are solid; the two exception paths (requeue after a failed
+    verification, and emergency preemption) are dashed and routed clear of every box.
+    """
+    fig, ax = plt.subplots(figsize=(5.40, 1.28))
+    ax.set_xlim(0, 100); ax.set_ylim(7.6, 45); ax.axis('off')
+
+    BW, BH, BY = 17.0, 10.0, 20.0
+    XS = [0.0, 20.75, 41.5, 62.25, 83.0]
     names = ['UNDETECTED', 'DETECTED', 'QUEUED', 'CLEANING', 'VERIFIED']
-    cols = ['#9AA3AA', '#E3B40F', '#E07B29', '#C9283E', TEAL]
-    tcol = ['white', INK, 'white', 'white', 'white']
+    fills = ['#FFFFFF', '#FFFFFF', '#FFFFFF', '#EDEDED', '#D9D9D9']
+    cx = [x + BW / 2 for x in XS]
 
-    for x, n, c, tc in zip(xs, names, cols, tcol):
-        ax.add_patch(FancyBboxPatch((x, Y), W, H,
-                     boxstyle='round,pad=0.3,rounding_size=2.0',
-                     fc=c, ec='none', zorder=3))
-        ax.text(x + W / 2, Y + H / 2, n, ha='center', va='center',
-                fontsize=6.5, fontweight='bold', color=tc, zorder=4)
+    for x, n, fc in zip(XS, names, fills):
+        ax.add_patch(FancyBboxPatch((x, BY), BW, BH,
+                     boxstyle='round,pad=0.25,rounding_size=1.6',
+                     fc=fc, ec='#1A1A1A', lw=0.9, zorder=3))
+        ax.text(x + BW / 2, BY + BH / 2, n, ha='center', va='center',
+                fontsize=6.4, fontweight='bold', color='#1A1A1A', zorder=4)
 
-    def edge(i, j, label):
-        p0 = (xs[i] + W + 0.4, Y + H / 2)
-        p1 = (xs[j] - 0.4, Y + H / 2)
-        ax.add_patch(FancyArrowPatch(p0, p1, arrowstyle='-|>', mutation_scale=7.0,
-                     lw=0.9, color=DEEP, zorder=5))
-        ax.text((p0[0] + p1[0]) / 2, Y + H + 1.6, label, ha='center', va='bottom',
-                fontsize=5.5, color=DEEP, style='italic', zorder=6)
+    def fwd(i, label):
+        x0, x1 = XS[i] + BW + 0.45, XS[i + 1] - 0.45
+        ax.add_patch(FancyArrowPatch((x0, BY + BH / 2), (x1, BY + BH / 2),
+                     arrowstyle='-|>', mutation_scale=6.5, lw=0.9,
+                     color='#1A1A1A', zorder=5))
+        ax.text((x0 + x1) / 2, BY + BH + 1.6, label, ha='center', va='bottom',
+                fontsize=5.5, color='#1A1A1A', style='italic', zorder=6)
 
-    edge(0, 1, 'FOV hit')
-    edge(1, 2, r'$U(d)$ ranked')
-    edge(2, 3, 'dispatch')
-    edge(3, 4, r'residual $\leq \theta_v$')
+    fwd(0, 'FOV hit')
+    fwd(1, r'$U(d)$ ranked')
+    fwd(2, 'dispatch')
+    fwd(3, r'residual $\leq\theta_v$')
 
-    # Requeue loop, routed under the chain.
-    ax.plot([71.0, 71.0, 50.5, 50.5], [Y, 11.0, 11.0, Y - 0.4],
-            color=CRIMSON, lw=0.9, zorder=5, solid_joinstyle='round')
-    ax.add_patch(FancyArrowPatch((50.5, 13.0), (50.5, Y - 0.4), arrowstyle='-|>',
-                 mutation_scale=7.0, lw=0.9, color=CRIMSON, zorder=5))
-    ax.text(60.75, 9.2, r'residual $> \theta_v$:  RE-QUEUED', ha='center', va='top',
-            fontsize=5.5, color=CRIMSON, style='italic', zorder=6)
+    def dashed(pts, label, lxy, va='center'):
+        xs = [q[0] for q in pts]; ys = [q[1] for q in pts]
+        ax.plot(xs, ys, color='#1A1A1A', lw=0.85, ls=(0, (3.2, 2.2)), zorder=5,
+                solid_joinstyle='round')
+        ax.add_patch(FancyArrowPatch(pts[-2], pts[-1], arrowstyle='-|>',
+                     mutation_scale=6.5, lw=0.85, color='#1A1A1A', zorder=5))
+        ax.text(lxy[0], lxy[1], label, ha='center', va=va, fontsize=5.5,
+                color='#1A1A1A', style='italic', zorder=6)
 
-    # Emergency fast path, routed over the chain.
-    ax.plot([30.0, 30.0, 71.0, 71.0], [Y + H, 41.0, 41.0, Y + H + 0.4],
-            color='#8E1F2F', lw=0.9, zorder=5, solid_joinstyle='round')
-    ax.add_patch(FancyArrowPatch((71.0, 43.0), (71.0, Y + H + 0.4), arrowstyle='-|>',
-                 mutation_scale=7.0, lw=0.9, color='#8E1F2F', zorder=5))
-    ax.text(50.5, 42.6, r'$S \geq \theta_c$:  emergency preemption (context stack)',
-            ha='center', va='bottom', fontsize=5.5, color='#8E1F2F',
-            style='italic', zorder=6)
+    # Failed verification returns the defect to the queue.
+    dashed([(cx[3], BY), (cx[3], 12.5), (cx[2], 12.5), (cx[2], BY - 0.4)],
+           r'residual $>\theta_v$:  RE-QUEUED', ((cx[2] + cx[3]) / 2, 10.8), va='top')
+    # A defect crossing the critical threshold preempts whatever is running.
+    dashed([(cx[1], BY + BH), (cx[1], 38.5), (cx[3], 38.5), (cx[3], BY + BH + 0.4)],
+           r'$S \geq \theta_c$:  emergency preemption (context stack)',
+           ((cx[1] + cx[3]) / 2, 39.6), va='bottom')
 
     fig.savefig(os.path.join(OUT, 'fig2_lifecycle.png'))
     plt.close(fig)
